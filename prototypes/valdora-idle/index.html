@@ -45,6 +45,39 @@
           <small id="zoneSubtitle">Território recomendado · Nv. 1–19</small>
         </div>
 
+        <div class="exploration-layer" id="explorationLayer" aria-label="Mapa 2D explorável">
+          <aside class="field-quest-card glass-panel">
+            <span>CONTRATO DE CAÇA</span>
+            <strong id="fieldQuestTitle">Ameaças da fronteira</strong>
+            <div class="field-quest-progress"><i id="fieldQuestBar"></i></div>
+            <small id="fieldQuestText">Derrote 3 criaturas · 0/3</small>
+          </aside>
+
+          <button class="field-landmark field-npc" style="--field-x:26%;--field-y:25%" data-field-action="warden" aria-label="Conversar com o Vigia Rowan">
+            <span>!</span><b>Vigia Rowan</b><small>Contrato e descanso</small>
+          </button>
+          <button class="field-landmark field-shrine" style="--field-x:79%;--field-y:33%" data-field-action="shrine" aria-label="Usar o altar antigo">
+            <span>✦</span><b>Altar antigo</b><small>Bênção temporária</small>
+          </button>
+
+          <div class="field-enemies" id="fieldEnemies"></div>
+
+          <div class="field-player" id="fieldPlayer">
+            <div class="field-player-name"><strong id="fieldPlayerName">Kael</strong><small id="fieldPlayerClass">Vanguarda</small></div>
+            <img src="assets/duskblade.png" alt="Personagem controlável de L2idle">
+            <i></i>
+          </div>
+
+          <button class="interaction-prompt" id="interactionPrompt" type="button"><kbd>E</kbd><span id="interactionText">APROXIME-SE DE UM ALVO</span></button>
+          <div class="exploration-help"><span>WASD / SETAS</span> para andar <b>·</b> clique no mapa ou em um inimigo</div>
+          <div class="movement-pad" aria-label="Controles de movimento">
+            <button data-move="up" aria-label="Andar para cima">▲</button>
+            <button data-move="left" aria-label="Andar para a esquerda">◀</button>
+            <button data-move="down" aria-label="Andar para baixo">▼</button>
+            <button data-move="right" aria-label="Andar para a direita">▶</button>
+          </div>
+        </div>
+
         <aside class="panel player-card glass-panel">
           <div class="panel-kicker"><span>PERSONAGEM</span><b id="gradeBadge">GRAU D</b></div>
           <div class="player-row">
@@ -72,12 +105,13 @@
           <div class="target-name"><strong id="enemyName">Lobo da Fronteira</strong><span id="enemyRarity">COMUM</span></div>
           <div class="bar enemy-hp"><i id="enemyHpBar"></i><span id="enemyHpText">0 / 0</span></div>
           <div class="target-reward"><span>Recompensa</span><strong id="enemyReward">0 EXP · 0 ouro</strong></div>
+          <button id="fleeButton" class="flee-button">↩ RETORNAR AO MAPA</button>
           <div class="target-rules">
             <button id="targetModeButton" class="rule-button"><small>PRIORIDADE</small><strong id="targetModeLabel">QUALQUER ALVO</strong><span>↻</span></button>
             <label class="toggle-rule"><input id="autoPotionToggle" type="checkbox"><i></i><span><small>POÇÃO AUTOMÁTICA</small><strong>&lt; 35% HP</strong></span></label>
           </div>
           <div class="auto-controls">
-            <button id="autoToggle" class="primary-action active"><span class="pulse-dot"></span><b>AUTO CAÇA</b><small>ATIVADA</small></button>
+            <button id="autoToggle" class="primary-action active"><span class="pulse-dot"></span><b>AUTO COMBATE</b><small>ATIVADO</small></button>
             <button id="potionButton" class="potion-button"><span>✚</span><b>Poção</b><small id="potionCount">3</small></button>
           </div>
           <div class="charge-row">
@@ -107,7 +141,7 @@
         <button class="boss-signal" id="bossSignal" data-view="conflict"><span class="boss-signal-icon">♛</span><span><small>CHEFE MUNDIAL AVISTADO</small><strong>Valakas</strong></span><b>DESAFIAR ›</b></button>
 
         <div class="skill-dock glass-panel" aria-label="Barra de habilidades">
-          <div class="skill-meta"><small>BARRA DE HABILIDADES</small><strong id="combatModeText">MODO AUTOMÁTICO</strong></div>
+          <div class="skill-meta"><small>BARRA DE HABILIDADES</small><strong id="combatModeText">COMBATE MANUAL</strong></div>
           <div class="skill-bar" id="skillBar"></div>
           <button class="skill-menu" data-view="character" title="Atributos e habilidades">+</button>
         </div>
@@ -149,7 +183,7 @@
     </main>
 
     <footer class="prototype-footer">
-      <span>Protótipo original · progresso salvo neste navegador · nenhuma associação com franquias existentes</span>
+      <span>Protótipo independente e não oficial · Lineage II e Valakas pertencem à NCSOFT</span>
       <div><button id="presentationButton">Modo apresentação</button><button id="resetButton">Reiniciar crônica</button></div>
     </footer>
   </div>

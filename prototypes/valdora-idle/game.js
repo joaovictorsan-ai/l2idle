@@ -155,6 +155,18 @@
     blessed: { icon: "✦", name: "Pergaminho selado", copy: "Protege o equipamento da quebra.", currency: "gems", price: 22, amount: 1 }
   };
 
+  const FIELD_SPAWNS = [
+    { x: 39, y: 38 },
+    { x: 64, y: 27 },
+    { x: 72, y: 66 },
+    { x: 36, y: 70 }
+  ];
+
+  const FIELD_LANDMARKS = [
+    { id: "warden", x: 26, y: 25, range: 12 },
+    { id: "shrine", x: 79, y: 33, range: 11 }
+  ];
+
   function createStarterItem(slot, name, stats) {
     return { id: makeId(), slot, name, rarity: "common", grade: "D", enchant: 0, ...stats };
   }
@@ -182,7 +194,7 @@
       version: 2, created: false, name: "Kael", race: "valdren", archetype: "vanguard",
       classTier: 0, classPath: null, finalClass: null,
       attributes: { str: 0, dex: 0, con: 0, int: 0, wit: 0 }, attributePoints: 0,
-      lastSeen: Date.now(), running: true, sound: false, speed: 1, zoneIndex: 0,
+      lastSeen: Date.now(), running: false, sound: false, speed: 1, zoneIndex: 0,
       targetMode: "any", autoPotion: true, autoEther: false,
       gold: 420, gems: 35, honor: 0, potions: 8, etherCharges: 80, scrolls: 4, blessedScrolls: 1, useBlessedScroll: false,
       level: 1, xp: 0, hp: 0, mp: 0, kills: 0, skillUses: 0, enchantAttempts: 0,
@@ -190,6 +202,7 @@
       pvpKills: 0, karma: 0, territoryWins: 0, territoryCooldownUntil: 0,
       clan: { joined: false, name: "", influence: 0 },
       worldBossWins: 0, bossCooldownUntil: 0,
+      fieldPosition: { x: 50, y: 72 }, huntContractKills: 0, huntContractsCompleted: 0, shrineCooldownUntil: 0,
       activeBuffs: { furyUntil: 0, wardUntil: 0 },
       marketPurchases: 0, claimedMissions: [], inventory: [],
       equipment: starterEquipment("vanguard")
@@ -212,6 +225,7 @@
       ...fresh, ...saved, version: 2,
       attributes: { ...fresh.attributes, ...(saved.attributes || {}) },
       activeBuffs: { ...fresh.activeBuffs, ...(saved.activeBuffs || {}) },
+      fieldPosition: { ...fresh.fieldPosition, ...(saved.fieldPosition || {}) },
       clan: { ...fresh.clan, ...(saved.clan || {}) },
       claimedMissions: Array.isArray(saved.claimedMissions) ? saved.claimedMissions : [],
       inventory: Array.isArray(saved.inventory) ? saved.inventory.map((item) => normalizeItem(item, item.slot)) : []
@@ -248,6 +262,11 @@
 
   let state = loadState();
   let enemy = null;
+  let encounterActive = false;
+  let activeFieldEnemyId = null;
+  let fieldEnemies = [];
+  let nearbyFieldTarget = null;
+  let fieldMoveTimer = null;
   let combatLocked = false;
   let selectedInventoryId = null;
   let inventoryFilter = "all";
@@ -396,6 +415,165 @@
     return "--rarity:" + rarity.color + ";--glow-size:" + glow.size + ";--glow-color:" + glow.color;
   }
 
+  function fieldDistance(x1, y1, x2, y2) {
+    return Math.hypot((x1 - x2) * 1.15, y1 - y2);
+  }
+
+  function buildFieldEnemies() {
+    const zone = ZONES[state.zoneIndex];
+    fieldEnemies = FIELD_SPAWNS.map((spawn, index) => {
+      let rank = targetRank();
+      if (index === 1 && rank === "common") rank = "elite";
+      const baseName = zone.enemies[(index + state.zoneIndex) % zone.enemies.length];
+      return { id: "field-" + state.zoneIndex + "-" + index + "-" + Date.now(), baseName, rank, x: spawn.x, y: spawn.y, respawnUntil: 0 };
+    });
+    renderExploration();
+  }
+
+  function renderFieldPlayer() {
+    const player = $("#fieldPlayer");
+    if (!player) return;
+    player.style.left = state.fieldPosition.x + "%";
+    player.style.top = state.fieldPosition.y + "%";
+    $("#fieldPlayerName").textContent = state.name;
+    $("#fieldPlayerClass").textContent = currentClassName();
+  }
+
+  function renderExploration() {
+    if (!$("#fieldEnemies")) return;
+    const now = Date.now();
+    $("#fieldEnemies").innerHTML = fieldEnemies.map((target) => {
+      const respawning = target.respawnUntil > now;
+      const rankLabel = target.rank === "boss" ? "CHEFE DE CAMPO" : target.rank === "elite" ? "ELITE" : "CRIATURA";
+      const name = target.rank === "boss" ? "Alfa " + target.baseName : target.rank === "elite" ? target.baseName + " Veterano" : target.baseName;
+      return "<button class='field-enemy " + target.rank + " " + (respawning ? "respawning" : "") + "' style='--field-x:" + target.x + "%;--field-y:" + target.y + "%' data-field-enemy='" + target.id + "' " + (respawning ? "disabled" : "") + "><img src='assets/ashfang.png' alt='" + escapeHtml(name) + "'><span class='field-enemy-label'><strong>" + escapeHtml(name) + "</strong><small>" + (respawning ? "RETORNANDO" : rankLabel) + "</small></span></button>";
+    }).join("");
+    const progress = clamp(Number(state.huntContractKills || 0), 0, 3);
+    $("#fieldQuestBar").style.width = progress / 3 * 100 + "%";
+    $("#fieldQuestText").textContent = "Derrote 3 criaturas · " + progress + "/3";
+    $("#fieldQuestTitle").textContent = "Ameaças em " + ZONES[state.zoneIndex].title;
+    renderFieldPlayer();
+    checkNearbyFieldTarget();
+  }
+
+  function enterExploration(message = "") {
+    encounterActive = false;
+    activeFieldEnemyId = null;
+    combatLocked = false;
+    $("#world").classList.add("exploring");
+    $("#world").classList.remove("combat-active");
+    $("#heroEntity").classList.remove("defeated");
+    if (!fieldEnemies.length) buildFieldEnemies();
+    renderExploration();
+    renderHud();
+    if (message) showActivity(message);
+  }
+
+  function beginFieldEncounter(target) {
+    if (!target || target.respawnUntil > Date.now() || encounterActive || !state.created) return;
+    encounterActive = true;
+    activeFieldEnemyId = target.id;
+    combatLocked = false;
+    $("#world").classList.remove("exploring");
+    $("#world").classList.add("combat-active");
+    spawnEnemy(target);
+    showActivity("Encontro iniciado contra " + enemy.name + ". Use 1–5 ou ative o combate automático.");
+  }
+
+  function fleeFieldEncounter() {
+    if (!encounterActive) return;
+    enterExploration("Você recuou do combate. Escolha outro caminho ou tente novamente.");
+    saveState();
+  }
+
+  function moveFieldPlayerTo(x, y, callback = null) {
+    if (encounterActive || !state.created) return;
+    clearTimeout(fieldMoveTimer);
+    state.fieldPosition.x = clamp(Number(x), 12, 88);
+    state.fieldPosition.y = clamp(Number(y), 18, 82);
+    const player = $("#fieldPlayer");
+    player.classList.add("walking");
+    renderFieldPlayer();
+    fieldMoveTimer = setTimeout(() => {
+      player.classList.remove("walking");
+      checkNearbyFieldTarget();
+      saveState();
+      if (callback) callback();
+    }, 250);
+  }
+
+  function moveFieldPlayer(direction) {
+    const steps = { up: [0, -4], down: [0, 4], left: [-4, 0], right: [4, 0] };
+    const delta = steps[direction];
+    if (!delta) return;
+    moveFieldPlayerTo(state.fieldPosition.x + delta[0], state.fieldPosition.y + delta[1]);
+  }
+
+  function requestFieldEncounter(id) {
+    const target = fieldEnemies.find((entry) => entry.id === id);
+    if (!target || target.respawnUntil > Date.now()) return;
+    moveFieldPlayerTo(target.x, target.y + 4, () => beginFieldEncounter(target));
+  }
+
+  function checkNearbyFieldTarget() {
+    if (encounterActive || !$("#interactionPrompt")) return;
+    const candidates = fieldEnemies.filter((target) => target.respawnUntil <= Date.now()).map((target) => ({
+      type: "enemy", id: target.id, x: target.x, y: target.y, range: 10,
+      label: "ENFRENTAR " + target.baseName.toUpperCase()
+    })).concat(FIELD_LANDMARKS.map((landmark) => ({
+      ...landmark, type: "landmark", label: landmark.id === "warden" ? "CONVERSAR COM O VIGIA" : "ATIVAR O ALTAR"
+    })));
+    candidates.sort((a, b) => fieldDistance(state.fieldPosition.x, state.fieldPosition.y, a.x, a.y) - fieldDistance(state.fieldPosition.x, state.fieldPosition.y, b.x, b.y));
+    nearbyFieldTarget = candidates.find((candidate) => fieldDistance(state.fieldPosition.x, state.fieldPosition.y, candidate.x, candidate.y) <= candidate.range) || null;
+    const prompt = $("#interactionPrompt");
+    prompt.classList.toggle("ready", Boolean(nearbyFieldTarget));
+    $("#interactionText").textContent = nearbyFieldTarget ? nearbyFieldTarget.label : "EXPLORE O CAMPO E ENCONTRE UM ALVO";
+    $$(".field-enemy,.field-landmark").forEach((node) => node.classList.remove("focused"));
+    if (nearbyFieldTarget) {
+      const selector = nearbyFieldTarget.type === "enemy" ? "[data-field-enemy='" + nearbyFieldTarget.id + "']" : "[data-field-action='" + nearbyFieldTarget.id + "']";
+      $(selector)?.classList.add("focused");
+    }
+  }
+
+  function interactWithNearbyTarget() {
+    if (!nearbyFieldTarget || encounterActive) return;
+    if (nearbyFieldTarget.type === "enemy") requestFieldEncounter(nearbyFieldTarget.id);
+    else interactWithLandmark(nearbyFieldTarget.id);
+  }
+
+  function interactWithLandmark(id) {
+    if (id === "warden") {
+      showModal("<div class='modal-crest'><span>⚑</span></div><h2>Vigia Rowan</h2><p>A fronteira precisa de caçadores. Derrube três criaturas no campo e receba uma recompensa adicional de experiência e ouro.</p><div class='score-row'><div class='score-box'><small>PROGRESSO</small><strong>" + state.huntContractKills + "/3</strong></div><div class='score-box'><small>CONTRATOS</small><strong>" + state.huntContractsCompleted + "</strong></div><div class='score-box'><small>REGIÃO</small><strong>Nv. " + ZONES[state.zoneIndex].range[0] + "+</strong></div></div><button class='gold-button' style='width:100%' data-field-rest>DESCANSAR NO POSTO</button>");
+    }
+    if (id === "shrine") activateFieldShrine();
+  }
+
+  function activateFieldShrine() {
+    const remaining = Math.ceil((state.shrineCooldownUntil - Date.now()) / 1000);
+    if (remaining > 0) {
+      showActivity("O Altar antigo recuperará sua energia em " + remaining + "s.");
+      return;
+    }
+    state.activeBuffs.furyUntil = Math.max(state.activeBuffs.furyUntil, Date.now() + 90000);
+    state.activeBuffs.wardUntil = Math.max(state.activeBuffs.wardUntil, Date.now() + 90000);
+    state.shrineCooldownUntil = Date.now() + 120000;
+    showActivity("Bênção do Altar: ataque e defesa ampliados por 90 segundos.");
+    playTone("level");
+    saveState();
+    renderHud();
+  }
+
+  function restAtFieldPost() {
+    const stats = playerStats();
+    state.hp = stats.maxHp;
+    state.mp = stats.maxMp;
+    closeModal();
+    showActivity("Rowan restaurou seu HP e MP. Boa caça!");
+    playTone("potion");
+    saveState();
+    renderHud();
+  }
+
   function targetRank() {
     const roll = Math.random();
     if (state.targetMode === "boss") return roll < .32 ? "boss" : roll < .68 ? "elite" : "common";
@@ -403,13 +581,13 @@
     return roll < .035 ? "boss" : roll < .16 ? "elite" : "common";
   }
 
-  function spawnEnemy() {
+  function spawnEnemy(fieldTarget = null) {
     const zone = ZONES[state.zoneIndex];
     const upperLevel = Math.min(zone.range[1], Math.max(zone.range[0] + 1, state.level + 1));
     const level = randomBetween(zone.range[0], upperLevel);
-    const rank = targetRank();
+    const rank = fieldTarget ? fieldTarget.rank : targetRank();
     const multiplier = rank === "boss" ? 3.4 : rank === "elite" ? 1.72 : 1;
-    const baseName = zone.enemies[randomBetween(0, zone.enemies.length - 1)];
+    const baseName = fieldTarget ? fieldTarget.baseName : zone.enemies[randomBetween(0, zone.enemies.length - 1)];
     const name = rank === "boss" ? "Alfa " + baseName : rank === "elite" ? baseName + " Veterano" : baseName;
     const maxHp = Math.round(zone.baseHp * (1 + (level - zone.range[0]) * .105) * multiplier);
     enemy = {
@@ -417,7 +595,8 @@
       attack: Math.round(zone.baseAttack * (1 + (level - zone.range[0]) * .075) * (rank === "boss" ? 1.78 : rank === "elite" ? 1.3 : 1)),
       defense: Math.round(level * 1.18 + (rank === "boss" ? 12 : rank === "elite" ? 5 : 0)),
       exp: Math.round(zone.exp * multiplier * (1 + (level - zone.range[0]) * .045)),
-      gold: Math.round(zone.gold * multiplier * (1 + (level - zone.range[0]) * .045))
+      gold: Math.round(zone.gold * multiplier * (1 + (level - zone.range[0]) * .045)),
+      fieldId: fieldTarget ? fieldTarget.id : null
     };
     const entity = $("#enemyEntity");
     entity.classList.remove("defeated", "hit", "attack");
@@ -462,7 +641,7 @@
   }
 
   function playerAttack(multiplier = 1, label = "", force = false) {
-    if ((!state.running && !force) || combatLocked || !enemy || !state.created) return false;
+    if (!encounterActive || (!state.running && !force) || combatLocked || !enemy || !state.created) return false;
     combatLocked = true;
     const stats = playerStats();
     const crit = Math.random() * 100 < stats.crit;
@@ -492,10 +671,14 @@
   }
 
   function combatTick() {
-    playerAttack(1, "", false);
+    if (encounterActive) playerAttack(1, "", false);
   }
 
   function enemyAttack() {
+    if (!encounterActive || !enemy) {
+      combatLocked = false;
+      return;
+    }
     const stats = playerStats();
     if (Math.random() * 100 < stats.evasion) {
       showDamage("ESQUIVA", false, true);
@@ -544,44 +727,57 @@
 
   function handleEnemyDefeat() {
     $("#enemyEntity").classList.add("defeated");
+    const defeatedEnemy = enemy;
+    const fieldTarget = fieldEnemies.find((target) => target.id === activeFieldEnemyId);
     state.kills += 1;
     state.karma = Math.max(0, state.karma - 2);
-    state.gold += enemy.gold;
-    addExperience(enemy.exp);
+    state.gold += defeatedEnemy.gold;
+    addExperience(defeatedEnemy.exp);
+    state.huntContractKills = Number(state.huntContractKills || 0) + 1;
+    let contractReward = "";
+    if (state.huntContractKills >= 3) {
+      const zone = ZONES[state.zoneIndex];
+      const bonusGold = zone.gold * 8;
+      const bonusExperience = zone.exp * 5;
+      state.huntContractKills = 0;
+      state.huntContractsCompleted = Number(state.huntContractsCompleted || 0) + 1;
+      state.gold += bonusGold;
+      addExperience(bonusExperience);
+      contractReward = " · CONTRATO CONCLUÍDO +" + bonusGold + " ouro";
+      playTone("legendary");
+    }
     const stats = playerStats();
     state.hp = Math.min(stats.maxHp, state.hp + Math.round(stats.maxHp * .08));
     state.mp = Math.min(stats.maxMp, state.mp + Math.round(stats.maxMp * .07));
-    showActivity(enemy.name + " derrotado · +" + enemy.exp + " EXP · +" + enemy.gold + " ouro");
-    const lootChance = enemy.rank === "boss" ? 1 : enemy.rank === "elite" ? .8 : .45;
+    showActivity(defeatedEnemy.name + " derrotado · +" + defeatedEnemy.exp + " EXP · +" + defeatedEnemy.gold + " ouro" + contractReward);
+    const lootChance = defeatedEnemy.rank === "boss" ? 1 : defeatedEnemy.rank === "elite" ? .8 : .45;
     if (Math.random() < lootChance) {
-      const item = generateItem({ bossDrop: enemy.rank === "boss" });
+      const item = generateItem({ bossDrop: defeatedEnemy.rank === "boss" });
       state.inventory.unshift(item);
       if (state.inventory.length > 60) state.inventory.pop();
       showLoot(item);
     }
-    if (Math.random() < (enemy.rank === "boss" ? .55 : .08)) state.scrolls += 1;
-    state.etherCharges += enemy.rank === "boss" ? randomBetween(8, 16) : randomBetween(0, 3);
+    if (Math.random() < (defeatedEnemy.rank === "boss" ? .55 : .08)) state.scrolls += 1;
+    state.etherCharges += defeatedEnemy.rank === "boss" ? randomBetween(8, 16) : randomBetween(0, 3);
+    if (fieldTarget) fieldTarget.respawnUntil = Date.now() + 12000;
     saveState();
     renderHud();
     setTimeout(() => {
-      spawnEnemy();
-      combatLocked = false;
+      enterExploration("Volte ao campo para escolher seu próximo alvo.");
     }, Math.round(720 / state.speed));
   }
 
   function handlePlayerDefeat() {
     state.running = false;
     $("#heroEntity").classList.add("defeated");
-    showActivity(escapeHtml(state.name) + " foi derrotado e retornará ao assentamento.");
+    showActivity(escapeHtml(state.name) + " foi derrotado e retornará ao posto da fronteira.");
     setTimeout(() => {
       const stats = playerStats();
       state.hp = Math.round(stats.maxHp * .72);
       state.mp = Math.round(stats.maxMp * .72);
-      state.running = true;
       $("#heroEntity").classList.remove("defeated");
-      renderHud();
-      showActivity("Recuperado. A caçada automática foi retomada.");
-      combatLocked = false;
+      enterExploration("Recuperado no posto. Escolha outro alvo quando estiver pronto.");
+      saveState();
     }, 1800);
   }
 
@@ -658,6 +854,7 @@
     $("#zoneSubtitle").textContent = zone.subtitle;
     $("#zoneButtonText").textContent = zone.title;
     $("#world").style.setProperty("--zone-bg", "url('" + zone.background + "')");
+    $("#world").style.setProperty("--zone-map-bg", "url('assets/frontier-hunting-ground.png')");
     $("#pvpZoneFlag").textContent = zone.pvp ? "ZONA PVP" : "ZONA SEGURA";
     $("#pvpZoneFlag").classList.toggle("danger", zone.pvp);
     const promotionReady = (state.level >= 20 && state.classTier === 0) || (state.level >= 40 && state.classTier === 1);
@@ -679,8 +876,8 @@
     }
     const auto = $("#autoToggle");
     auto.classList.toggle("active", state.running);
-    auto.querySelector("small").textContent = state.running ? "ATIVADA" : "PAUSADA";
-    $("#combatModeText").textContent = state.running ? "MODO AUTOMÁTICO" : "MODO MANUAL";
+    auto.querySelector("small").textContent = state.running ? "ATIVADO" : "PAUSADO";
+    $("#combatModeText").textContent = state.running ? "COMBATE AUTOMÁTICO" : "COMBATE MANUAL";
     $$(".speed").forEach((button) => button.classList.toggle("active", Number(button.dataset.speed) === state.speed));
     renderBuffs();
     renderEquipmentStrip();
@@ -1224,10 +1421,11 @@
     if (!zone || state.level < zone.unlock) return;
     state.zoneIndex = index;
     combatLocked = false;
-    spawnEnemy();
+    state.fieldPosition = { x: 50, y: 72 };
+    buildFieldEnemies();
     saveState();
     closeDrawer();
-    showActivity("Teleporte concluído: " + zone.title + ".");
+    enterExploration("Teleporte concluído: " + zone.title + ". Explore o mapa e escolha sua presa.");
   }
 
   function usePotion(automatic) {
@@ -1311,9 +1509,10 @@
     state.mp = stats.maxMp;
     saveState();
     renderCreation();
-    spawnEnemy();
+    buildFieldEnemies();
+    enterExploration();
     renderHud();
-    showActivity("Bem-vindo a L2idle, " + state.name + ".");
+    showActivity("Bem-vindo a L2idle, " + state.name + ". Use WASD ou clique no mapa para começar a caçada.");
     playTone("level");
   }
 
@@ -1342,7 +1541,8 @@
     state.zoneIndex = Math.max(state.zoneIndex, 2);
     closeModal();
     closeDrawer();
-    spawnEnemy();
+    buildFieldEnemies();
+    enterExploration();
     saveState();
     renderHud();
     showActivity("Modo apresentação ativo: nível 40 e sistemas liberados.");
@@ -1382,8 +1582,29 @@
         openDrawer(nav.dataset.view);
         return;
       }
+      const fieldEnemy = event.target.closest("[data-field-enemy]");
+      if (fieldEnemy) {
+        requestFieldEncounter(fieldEnemy.dataset.fieldEnemy);
+        return;
+      }
+      const fieldAction = event.target.closest("[data-field-action]");
+      if (fieldAction) {
+        const landmark = FIELD_LANDMARKS.find((entry) => entry.id === fieldAction.dataset.fieldAction);
+        if (landmark) moveFieldPlayerTo(landmark.x, landmark.y + 4, () => interactWithLandmark(landmark.id));
+        return;
+      }
+      const movement = event.target.closest("[data-move]");
+      if (movement) {
+        moveFieldPlayer(movement.dataset.move);
+        return;
+      }
+      if (event.target.closest("#interactionPrompt")) {
+        interactWithNearbyTarget();
+        return;
+      }
       if (event.target.closest("[data-close-drawer]")) closeDrawer();
       if (event.target.closest("[data-close-modal]")) closeModal();
+      if (event.target.closest("[data-field-rest]")) restAtFieldPost();
       const race = event.target.closest("[data-race]");
       if (race) { draftRace = race.dataset.race; renderCreation(); }
       const archetype = event.target.closest("[data-archetype]");
@@ -1439,20 +1660,26 @@
         draftArchetype = state.archetype;
         renderCreation();
       }
+      const explorationMap = event.target.closest("#explorationLayer");
+      if (explorationMap && !event.target.closest("button,aside,.movement-pad")) {
+        const rect = explorationMap.getBoundingClientRect();
+        moveFieldPlayerTo((event.clientX - rect.left) / rect.width * 100, (event.clientY - rect.top) / rect.height * 100);
+      }
     });
     $("#createCharacterButton").addEventListener("click", createCharacter);
     $("#autoToggle").addEventListener("click", () => {
       state.running = !state.running;
-      showActivity(state.running ? "Caçada automática retomada." : "Caçada automática pausada.");
+      showActivity(encounterActive ? (state.running ? "Combate automático ativado." : "Combate automático pausado.") : (state.running ? "Combate automático preparado para o próximo encontro." : "Próximo encontro será controlado manualmente."));
       renderHud();
       saveState();
     });
     $("#potionButton").addEventListener("click", () => usePotion(false));
+    $("#fleeButton").addEventListener("click", fleeFieldEncounter);
     $("#zoneButton").addEventListener("click", () => openDrawer("zones"));
     $("#targetModeButton").addEventListener("click", () => {
       state.targetMode = state.targetMode === "any" ? "elite" : state.targetMode === "elite" ? "boss" : "any";
       showActivity("Prioridade de alvo: " + { any: "qualquer", elite: "elites", boss: "chefes" }[state.targetMode] + ".");
-      spawnEnemy();
+      if (!encounterActive) buildFieldEnemies();
       saveState();
     });
     $("#autoPotionToggle").addEventListener("change", (event) => {
@@ -1485,7 +1712,18 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") { closeModal(); closeDrawer(); }
-      if (!["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) && /^[1-6]$/.test(event.key)) {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      const movementKeys = { ArrowUp: "up", w: "up", W: "up", ArrowDown: "down", s: "down", S: "down", ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right" };
+      if (!encounterActive && state.created && movementKeys[event.key] && !$("#modal").classList.contains("open") && !$("#drawer").classList.contains("open")) {
+        event.preventDefault();
+        moveFieldPlayer(movementKeys[event.key]);
+        return;
+      }
+      if (!encounterActive && state.created && event.key.toLowerCase() === "e") {
+        interactWithNearbyTarget();
+        return;
+      }
+      if (encounterActive && /^[1-6]$/.test(event.key)) {
         const skill = skillDefinitions()[Number(event.key) - 1];
         if (skill) useSkill(skill.id);
       }
@@ -1502,12 +1740,14 @@
     applyOfflineProgress();
     bindEvents();
     renderCreation();
-    spawnEnemy();
+    buildFieldEnemies();
+    enterExploration();
     renderHud();
     setInterval(combatTick, 620);
     setInterval(() => {
       renderBuffs();
       renderSkillBar();
+      if (!encounterActive) renderExploration();
       if ($("#drawer").classList.contains("open") && $("#drawer").dataset.view === "conflict" && conflictTab === "boss") renderConflict("boss");
     }, 1000);
     setInterval(saveState, 10000);

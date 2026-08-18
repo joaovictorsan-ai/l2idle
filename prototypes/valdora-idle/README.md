@@ -1,6 +1,6 @@
 # L2idle — protótipo
 
-Vertical slice local de um idle MMORPG medieval para navegador. A proposta é validar progressão, identidade de classe, caçada automática, economia, bosses e PvP antes de investir em backend ou multiplayer real.
+Vertical slice local de um MMORPG medieval para navegador. A proposta é validar exploração 2D, caça ativa, progressão, identidade de classe, economia, bosses e PvP antes de investir em backend ou multiplayer real.
 
 ## Como executar
 
@@ -17,7 +17,9 @@ Depois acesse `http://localhost:8088`.
 
 - Criação de personagem com quatro linhagens e três arquétipos originais.
 - Duas promoções de classe nos níveis 20 e 40, com escolhas de especialização.
-- Combate automático com prioridade de alvo, poções automáticas, skill bar, mana, buffs e cargas de Éter.
+- Mapa 2D explorável com movimentação por WASD, setas, clique ou controles de toque.
+- Criaturas visíveis no campo, encontros escolhidos pelo jogador, NPC, altar interativo e contratos de três abates.
+- Combate manual por skill bar com opção de automação, prioridade de alvo, poções automáticas, mana, buffs e cargas de Éter.
 - Experiência, atributos, níveis, ouro e progressão persistente via `localStorage`.
 - Oito slots de equipamento em paper doll, cinco graus (D, C, B, A e S) e quatro raridades.
 - Inventário, comparação, requisitos de nível, equipamentos e venda de itens.
@@ -37,4 +39,8 @@ Backend, contas, economia real entre jogadores, chat, pagamentos, RMT, anti-chea
 
 ## Assets gerados
 
-Os PNGs em `assets/` foram criados com a ferramenta integrada de geração de imagens usando prompts de fantasia medieval original. Nenhum nome, personagem, mapa, ícone ou asset de franquia existente é utilizado.
+Os PNGs em `assets/` foram criados com a ferramenta integrada de geração de imagens usando prompts de fantasia medieval original. Mapas, personagens, criaturas, interface e ícones do protótipo são originais.
+
+## Aviso de propriedade intelectual
+
+Este é um protótipo independente e não oficial, sem afiliação ou endosso da NCSOFT. Lineage II, Valakas e marcas relacionadas pertencem à NCSOFT e aos respectivos proprietários. A atribuição não representa uma licença de uso.
