@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0e14">
+  <title>Valdora Idle — Protótipo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" data-view="hunt" aria-label="Valdora Idle">
+        <span class="brand-mark">V</span>
+        <span>
+          <strong>VALDORA</strong>
+          <small>IDLE RPG · PROTÓTIPO</small>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="Navegação principal">
+        <button class="nav-item active" data-view="hunt"><span>⚔</span>Caçada</button>
+        <button class="nav-item" data-view="inventory"><span>🎒</span>Inventário <b id="inventoryBadge">0</b></button>
+        <button class="nav-item" data-view="forge"><span>✦</span>Forja</button>
+        <button class="nav-item" data-view="coliseum"><span>♜</span>Coliseu</button>
+        <button class="nav-item" data-view="missions"><span>◆</span>Missões <b id="missionBadge">1</b></button>
+      </nav>
+
+      <div class="account-cluster">
+        <div class="currency"><span class="coin-icon">●</span><strong id="goldValue">0</strong></div>
+        <div class="currency"><span class="gem-icon">◆</span><strong id="gemValue">0</strong></div>
+        <button id="soundToggle" class="icon-button" aria-label="Alternar som" title="Som">♪</button>
+      </div>
+    </header>
+
+    <main class="game-stage">
+      <section class="world" id="world">
+        <div class="world-shade"></div>
+        <div class="zone-heading">
+          <span>REGIÃO DE CAÇA</span>
+          <strong id="zoneTitle">Ruínas do Crepúsculo</strong>
+          <small id="zoneSubtitle">Território recomendado · Nv. 1–4</small>
+        </div>
+
+        <aside class="panel player-card glass-panel">
+          <div class="panel-kicker">SEU PERSONAGEM</div>
+          <div class="player-row">
+            <div class="portrait-frame"><img src="assets/duskblade.png" alt="Kael, Lâmina do Crepúsculo"></div>
+            <div class="player-identity">
+              <span class="class-label">LÂMINA DO CREPÚSCULO</span>
+              <div><strong>Kael</strong><span class="level-pill">Nv. <b id="levelValue">1</b></span></div>
+              <small id="powerValue">Poder 0</small>
+            </div>
+          </div>
+
+          <div class="stat-line">
+            <label>HP</label>
+            <div class="bar hp-bar"><i id="playerHpBar"></i><span id="playerHpText">0 / 0</span></div>
+          </div>
+          <div class="stat-line">
+            <label>EXP</label>
+            <div class="bar xp-bar"><i id="playerXpBar"></i><span id="playerXpText">0%</span></div>
+          </div>
+
+          <div class="equipment-strip" id="equipmentStrip"></div>
+
+          <div class="mini-stats">
+            <span><small>ATAQUE</small><strong id="attackValue">0</strong></span>
+            <span><small>DEFESA</small><strong id="defenseValue">0</strong></span>
+            <span><small>CRÍTICO</small><strong id="critValue">0%</strong></span>
+          </div>
+        </aside>
+
+        <aside class="panel target-card glass-panel">
+          <div class="target-topline">
+            <span class="danger-dot"></span>
+            <span>ALVO ATUAL</span>
+            <small id="enemyLevel">Nv. 1</small>
+          </div>
+          <div class="target-name">
+            <strong id="enemyName">Lobo Cinzento</strong>
+            <span id="enemyRarity">COMUM</span>
+          </div>
+          <div class="bar enemy-hp"><i id="enemyHpBar"></i><span id="enemyHpText">0 / 0</span></div>
+          <div class="target-reward"><span>Recompensa</span><strong id="enemyReward">0 EXP · 0 ouro</strong></div>
+          <div class="auto-controls">
+            <button id="autoToggle" class="primary-action active"><span class="pulse-dot"></span><b>AUTO CAÇA</b><small>ATIVADA</small></button>
+            <button id="potionButton" class="potion-button"><span>✚</span><b>Poção</b><small id="potionCount">3</small></button>
+          </div>
+          <div class="speed-row"><span>Velocidade</span><button class="speed active" data-speed="1">1×</button><button class="speed locked" data-speed="2">2× <small>◆ 50</small></button></div>
+        </aside>
+
+        <div class="combat-scene" aria-label="Área de combate">
+          <div class="entity hero-entity" id="heroEntity">
+            <div class="floating-name"><strong>Kael</strong><span id="heroLevelFloat">Nv. 1</span></div>
+            <img src="assets/duskblade.png" alt="Guerreiro Kael">
+            <div class="entity-shadow"></div>
+          </div>
+
+          <div class="combat-flash" id="combatFlash"></div>
+          <div class="damage-layer" id="damageLayer"></div>
+
+          <div class="entity enemy-entity" id="enemyEntity">
+            <div class="floating-name enemy-label"><strong id="enemyNameFloat">Lobo Cinzento</strong><span id="enemyLevelFloat">Nv. 1</span></div>
+            <img src="assets/ashfang.png" alt="Lobo monstruoso">
+            <div class="entity-shadow"></div>
+          </div>
+        </div>
+
+        <div class="loot-toast" id="lootToast" aria-live="polite">
+          <div id="lootToastIcon">◆</div>
+          <span><small>ITEM ENCONTRADO</small><strong id="lootToastName">Espada Antiga</strong></span>
+        </div>
+
+        <div class="world-footer glass-panel">
+          <div class="activity-feed">
+            <span class="live-dot"></span>
+            <div><small>ÚLTIMO EVENTO</small><strong id="activityText">A caçada começou nas ruínas...</strong></div>
+          </div>
+          <div class="kill-stat"><small>ABATES</small><strong id="killValue">0</strong></div>
+          <button id="zoneButton" class="zone-button"><span>☷</span><div><small>MUDAR ÁREA</small><strong id="zoneButtonText">Ruínas do Crepúsculo</strong></div><b>›</b></button>
+        </div>
+      </section>
+
+      <section class="drawer" id="drawer" aria-hidden="true">
+        <div class="drawer-backdrop" data-close-drawer></div>
+        <div class="drawer-panel">
+          <header>
+            <div><span id="drawerEyebrow">PERSONAGEM</span><h2 id="drawerTitle">Inventário</h2></div>
+            <button class="drawer-close" data-close-drawer aria-label="Fechar">×</button>
+          </header>
+          <div id="drawerContent" class="drawer-content"></div>
+        </div>
+      </section>
+
+      <section class="modal" id="modal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <div class="modal-card">
+          <button class="modal-close" data-close-modal aria-label="Fechar">×</button>
+          <div id="modalContent"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="prototype-footer">
+      <span>Vertical slice local · progresso salvo neste navegador</span>
+      <button id="resetButton">Reiniciar teste</button>
+    </footer>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
