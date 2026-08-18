@@ -1,6 +1,6 @@
-# Valdora Idle — protótipo
+# Valdora Chronicles — protótipo
 
-Vertical slice local de um idle RPG medieval para navegador. A proposta é validar o loop de caçada automática, drops, equipamento, enchant e Coliseu antes de investir em backend, multiplayer ou RMT.
+Vertical slice local de um idle MMORPG medieval para navegador. A proposta é validar progressão, identidade de classe, caçada automática, economia e conflitos antes de investir em backend ou multiplayer real.
 
 ## Como executar
 
@@ -15,21 +15,26 @@ Depois acesse `http://localhost:8088`.
 
 ## O que já funciona
 
-- Combate automático com dano, crítico, regeneração após cada abate e derrota sem punição.
-- Experiência, níveis, ouro e progressão persistente via `localStorage`.
-- Drops com quatro raridades e atributos escalados por área/nível.
-- Inventário, comparação, equipamento e venda de itens.
-- Enchant até +10 com custo e chance progressivos.
-- Três regiões desbloqueadas por nível.
-- Coliseu assíncrono simulado e pontos de honra.
-- Missões de onboarding.
+- Criação de personagem com quatro linhagens e três arquétipos originais.
+- Duas promoções de classe nos níveis 20 e 40, com escolhas de especialização.
+- Combate automático com prioridade de alvo, poções automáticas, skill bar, mana, buffs e cargas de Éter.
+- Experiência, atributos, níveis, ouro e progressão persistente via `localStorage`.
+- Oito slots de equipamento em paper doll, cinco graus (D, C, B, A e S) e quatro raridades.
+- Inventário, comparação, requisitos de nível, equipamentos e venda de itens.
+- Enchant até +12 com pergaminhos, auras visuais, chance progressiva e risco de quebra após +4.
+- Quatro regiões com regras de PvP e desbloqueios por nível.
+- Mercado de consumíveis e equipamentos, com taxa influenciada pelo karma.
+- Conclave assíncrono, clãs, PK/karma e guerra territorial simulada.
+- Chefe mundial com arte original e drops lendários extremamente raros.
+- Seis missões de apresentação dos sistemas.
 - Recompensas offline de até oito horas.
 - Layout responsivo para desktop e celular.
+- Modo apresentação, no rodapé, para liberar rapidamente o nível 40 e os recursos da demo.
 
 ## Escopo deliberadamente excluído
 
-Backend, contas, economia entre jogadores, chat, guildas, pagamentos, RMT, anti-cheat e multiplayer real. Esses sistemas só fariam sentido depois de validar retenção e interesse pelo loop principal.
+Backend, contas, economia real entre jogadores, chat, pagamentos, RMT, anti-cheat e multiplayer em tempo real. Mercado, clãs, PvP, guerra e chefe mundial são simulações locais desta versão.
 
 ## Assets gerados
 
-Os três PNGs em `assets/` foram criados com a ferramenta integrada de geração de imagens usando prompts de pixel art medieval original. Nenhum asset ou nome de franquia existente é utilizado.
+Os PNGs em `assets/` foram criados com a ferramenta integrada de geração de imagens usando prompts de fantasia medieval original. Nenhum nome, personagem, mapa, ícone ou asset de franquia existente é utilizado.

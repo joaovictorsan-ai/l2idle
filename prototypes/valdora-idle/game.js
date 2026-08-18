@@ -1,136 +1,249 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "valdora-idle-save-v1";
+  const STORAGE_KEY = "valdora-idle-save-v2";
+  const LEGACY_STORAGE_KEY = "valdora-idle-save-v1";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const makeId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+  const randomBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const formatNumber = (value) => Math.floor(value || 0).toLocaleString("pt-BR");
+  const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
 
   const RARITIES = {
-    common: { label: "Comum", color: "#9099a1", multiplier: 1, weight: 64 },
-    rare: { label: "Raro", color: "#5da9df", multiplier: 1.4, weight: 25 },
-    epic: { label: "Épico", color: "#a879dc", multiplier: 2, weight: 9 },
-    legendary: { label: "Lendário", color: "#e6b958", multiplier: 3.1, weight: 2 }
+    common: { label: "Comum", color: "#9099a1", multiplier: 1 },
+    rare: { label: "Raro", color: "#5da9df", multiplier: 1.42 },
+    epic: { label: "Épico", color: "#a879dc", multiplier: 2.05 },
+    legendary: { label: "Lendário", color: "#e6b958", multiplier: 3.2 }
   };
+
+  const GRADES = {
+    D: { label: "Grau D", minLevel: 1, color: "#aab1b7", multiplier: 1 },
+    C: { label: "Grau C", minLevel: 20, color: "#61a6dc", multiplier: 1.5 },
+    B: { label: "Grau B", minLevel: 40, color: "#9b79d1", multiplier: 2.2 },
+    A: { label: "Grau A", minLevel: 60, color: "#d28456", multiplier: 3.1 },
+    S: { label: "Grau S", minLevel: 80, color: "#e8c85d", multiplier: 4.35 }
+  };
+  const GRADE_ORDER = ["D", "C", "B", "A", "S"];
 
   const SLOT_META = {
     weapon: { label: "Arma", icon: "⚔" },
-    armor: { label: "Armadura", icon: "♜" },
     helmet: { label: "Elmo", icon: "♛" },
-    ring: { label: "Anel", icon: "◈" }
+    chest: { label: "Peitoral", icon: "♜" },
+    gloves: { label: "Luvas", icon: "✥" },
+    boots: { label: "Botas", icon: "♟" },
+    necklace: { label: "Colar", icon: "◇" },
+    ring: { label: "Anel", icon: "◈" },
+    cloak: { label: "Manto", icon: "⚑" }
   };
 
   const ITEM_POOLS = {
-    weapon: ["Espada do Vigia", "Lâmina Cinzenta", "Sabre do Exilado", "Espada de Cinzas"],
-    armor: ["Couraça do Errante", "Cota da Vigília", "Armadura de Ferro Negro", "Peitoral do Bastião"],
-    helmet: ["Elmo do Sentinela", "Capuz do Caçador", "Viseira do Juramento", "Coroa de Ferro"],
-    ring: ["Anel das Brasas", "Selo do Andarilho", "Aliança do Crepúsculo", "Sinete Esquecido"]
+    weapon: ["Espada do Vigia", "Arco da Bruma", "Cetro do Véu", "Lâmina Cinzenta"],
+    helmet: ["Elmo do Sentinela", "Capuz do Caçador", "Diadema Astral", "Viseira do Juramento"],
+    chest: ["Couraça do Errante", "Cota da Vigília", "Túnica do Oráculo", "Peitoral do Bastião"],
+    gloves: ["Manoplas de Ferro", "Luvas da Névoa", "Braçais Rúnicos", "Punhos do Exilado"],
+    boots: ["Grevas da Fronteira", "Botas do Rastreador", "Passos Arcanos", "Botas do Peregrino"],
+    necklace: ["Colar do Primeiro Sol", "Medalhão da Lua Pálida", "Talismã do Juramento", "Pingente das Cinzas"],
+    ring: ["Anel das Brasas", "Selo do Andarilho", "Sinete Esquecido", "Aliança do Crepúsculo"],
+    cloak: ["Manto do Alvorecer", "Capa da Bruma", "Véu do Arquimante", "Estandarte do Bastião"]
+  };
+
+  const RACES = {
+    valdren: { label: "Valdren", sigil: "✦", copy: "Versáteis e disciplinados.", bonus: { str: 2, dex: 0, con: 1, int: 0, wit: 0 } },
+    aelari: { label: "Aelari", sigil: "☾", copy: "Ágeis, atentos e precisos.", bonus: { str: 0, dex: 2, con: 0, int: 0, wit: 1 } },
+    dravari: { label: "Dravari", sigil: "◆", copy: "Robustos e implacáveis.", bonus: { str: 1, dex: 0, con: 3, int: -1, wit: 0 } },
+    umbrin: { label: "Umbrin", sigil: "♠", copy: "Astutos e ligados ao Véu.", bonus: { str: 0, dex: 1, con: 0, int: 2, wit: 0 } }
+  };
+
+  const ARCHETYPES = {
+    vanguard: {
+      label: "Vanguarda", icon: "⚔", copy: "Combate corpo a corpo e alta resistência.",
+      bonus: { str: 2, dex: 0, con: 2, int: -1, wit: 0 },
+      skill: "Ruptura do Bastião",
+      paths: [
+        { id: "duelist", name: "Duelista Rúnico", icon: "⚔", copy: "Pressão ofensiva e golpes críticos." },
+        { id: "warden", name: "Guardião de Ferro", icon: "♜", copy: "Defesa, provocação e sobrevivência." }
+      ],
+      finals: {
+        duelist: [
+          { id: "blade_master", name: "Mestre da Lâmina", icon: "✥", copy: "Sequências velozes de alto dano." },
+          { id: "crimson_herald", name: "Arauto Carmesim", icon: "◆", copy: "Poder crescente sob pressão." }
+        ],
+        warden: [
+          { id: "bastion_marshal", name: "Marechal do Bastião", icon: "♜", copy: "A muralha viva da linha de frente." },
+          { id: "amber_sentinel", name: "Sentinela de Âmbar", icon: "◇", copy: "Proteção rúnica e contra-ataque." }
+        ]
+      }
+    },
+    ranger: {
+      label: "Patrulheiro", icon: "➶", copy: "Velocidade, evasão e precisão à distância.",
+      bonus: { str: 0, dex: 3, con: 0, int: 0, wit: 1 },
+      skill: "Chuva de Setas",
+      paths: [
+        { id: "scout", name: "Batedor da Névoa", icon: "➶", copy: "Ataques rápidos e evasivos." },
+        { id: "stalker", name: "Predador do Ermo", icon: "♠", copy: "Críticos e execução de alvos." }
+      ],
+      finals: {
+        scout: [
+          { id: "horizon_warden", name: "Vigia do Horizonte", icon: "☼", copy: "Mestre do arco e da distância." },
+          { id: "wind_strider", name: "Passo do Vendaval", icon: "☽", copy: "Mobilidade e rajadas contínuas." }
+        ],
+        stalker: [
+          { id: "silent_fang", name: "Presa Silenciosa", icon: "♠", copy: "Emboscadas e dano crítico." },
+          { id: "wild_harbinger", name: "Arauto Selvagem", icon: "➶", copy: "Caça incansável a monstros raros." }
+        ]
+      }
+    },
+    arcanist: {
+      label: "Arcanista", icon: "✧", copy: "Magia rúnica, mana e poder elemental.",
+      bonus: { str: -1, dex: 0, con: 0, int: 3, wit: 2 },
+      skill: "Lança Astral",
+      paths: [
+        { id: "runist", name: "Adepto Rúnico", icon: "✧", copy: "Explosões arcanas e amplificação." },
+        { id: "oracle", name: "Oráculo do Véu", icon: "☾", copy: "Buffs, cura e controle de mana." }
+      ],
+      finals: {
+        runist: [
+          { id: "archmage", name: "Arquimante Astral", icon: "✦", copy: "Poder elemental em escala máxima." },
+          { id: "rift_weaver", name: "Tecelão de Fendas", icon: "◇", copy: "Rupturas do Véu e dano em cadeia." }
+        ],
+        oracle: [
+          { id: "dawn_hierophant", name: "Hierofante do Alvorecer", icon: "☼", copy: "Bênçãos e proteção superior." },
+          { id: "veil_sage", name: "Sábio do Véu", icon: "☾", copy: "Domínio de mana e enfraquecimentos." }
+        ]
+      }
+    }
   };
 
   const ZONES = [
     {
-      id: "ruins",
-      title: "Ruínas do Crepúsculo",
-      subtitle: "Território recomendado · Nv. 1–4",
-      unlock: 1,
-      range: [1, 4],
-      icon: "⌂",
-      enemies: ["Lobo Cinzento", "Fera das Ruínas", "Cão de Pedra"],
-      baseHp: 54,
-      baseAttack: 6,
-      exp: 22,
-      gold: 14,
-      tint: "none"
+      id: "frontier", title: "Fronteira de Aurion", subtitle: "Território recomendado · Nv. 1–19", unlock: 1, range: [1, 19],
+      icon: "⌂", enemies: ["Lobo da Fronteira", "Saqueador Cinzento", "Javali de Pedra"], baseHp: 58, baseAttack: 6, exp: 28, gold: 18,
+      background: "assets/frontier-valley.png", tint: "none", pvp: false
     },
     {
-      id: "blackwood",
-      title: "Bosque de Ferro Negro",
-      subtitle: "Território recomendado · Nv. 4–8",
-      unlock: 4,
-      range: [4, 8],
-      icon: "♠",
-      enemies: ["Fera do Bosque", "Lobo Enraizado", "Rastreador Corrompido"],
-      baseHp: 125,
-      baseAttack: 13,
-      exp: 48,
-      gold: 31,
-      tint: "hue-rotate(55deg) saturate(.75)"
+      id: "ruins", title: "Ruínas do Crepúsculo", subtitle: "Território disputado · Nv. 20–39", unlock: 20, range: [20, 39],
+      icon: "⌁", enemies: ["Vigia Espectral", "Gárgula Antiga", "Fera das Ruínas"], baseHp: 430, baseAttack: 42, exp: 150, gold: 92,
+      background: "assets/courtyard.png", tint: "hue-rotate(-8deg) saturate(1.08)", pvp: true
     },
     {
-      id: "ashcave",
-      title: "Fendas de Cinza",
-      subtitle: "Território recomendado · Nv. 8–14",
-      unlock: 8,
-      range: [8, 14],
-      icon: "▲",
-      enemies: ["Devorador de Brasas", "Presa Carbonizada", "Besta Magmática"],
-      baseHp: 280,
-      baseAttack: 25,
-      exp: 105,
-      gold: 68,
-      tint: "hue-rotate(-20deg) saturate(1.25) brightness(.9)"
+      id: "blackwood", title: "Bosque de Ferro Negro", subtitle: "Território de clãs · Nv. 40–59", unlock: 40, range: [40, 59],
+      icon: "♠", enemies: ["Rastreador Corrompido", "Fera do Bosque", "Cavaleiro Sem Rosto"], baseHp: 1320, baseAttack: 108, exp: 460, gold: 275,
+      background: "assets/frontier-valley.png", tint: "hue-rotate(70deg) saturate(.72)", pvp: true
+    },
+    {
+      id: "ashcrater", title: "Cratera das Cinzas", subtitle: "Domínio ancestral · Nv. 60–85", unlock: 60, range: [60, 85],
+      icon: "▲", enemies: ["Devorador de Brasas", "Titã Carbonizado", "Serpe Magmática"], baseHp: 3900, baseAttack: 245, exp: 1280, gold: 790,
+      background: "assets/courtyard.png", tint: "hue-rotate(-24deg) saturate(1.35) brightness(.92)", pvp: true
     }
   ];
 
   const MISSIONS = [
-    { id: "kills5", icon: "⚔", title: "Primeiro sangue", copy: "Derrote 5 criaturas.", field: "kills", goal: 5, gold: 180, gems: 5 },
-    { id: "level3", icon: "✦", title: "O despertar", copy: "Alcance o nível 3.", field: "level", goal: 3, gold: 320, gems: 8 },
-    { id: "enchant1", icon: "◆", title: "Centelha da forja", copy: "Realize 1 tentativa de enchant.", field: "enchantAttempts", goal: 1, gold: 240, gems: 10 },
-    { id: "arena1", icon: "♜", title: "Glória no Coliseu", copy: "Vença 1 duelo no Coliseu.", field: "arenaWins", goal: 1, gold: 400, gems: 12 }
+    { id: "kills10", icon: "⚔", title: "Batismo de aço", copy: "Derrote 10 criaturas.", field: "kills", goal: 10, gold: 350, gems: 5 },
+    { id: "level20", icon: "✦", title: "Primeira especialização", copy: "Alcance o nível 20.", field: "level", goal: 20, gold: 2200, gems: 18 },
+    { id: "enchant3", icon: "◆", title: "Mestre da forja", copy: "Realize 3 tentativas de enchant.", field: "enchantAttempts", goal: 3, gold: 1200, gems: 12 },
+    { id: "arena1", icon: "♜", title: "Conclave de heróis", copy: "Vença 1 duelo ranqueado.", field: "arenaWins", goal: 1, gold: 1600, gems: 14 },
+    { id: "boss1", icon: "♛", title: "Queda do soberano", copy: "Derrote 1 chefe mundial.", field: "worldBossWins", goal: 1, gold: 5000, gems: 35 },
+    { id: "territory1", icon: "⚑", title: "Pelo estandarte", copy: "Vença 1 guerra territorial.", field: "territoryWins", goal: 1, gold: 3400, gems: 24 }
   ];
 
-  const makeId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const randomBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const formatNumber = (value) => Math.floor(value).toLocaleString("pt-BR");
+  const MARKET_PRODUCTS = {
+    potions: { icon: "✚", name: "Poções rubras", copy: "Recupera 48% do HP. Pacote com 5.", currency: "gold", price: 180, amount: 5 },
+    ether: { icon: "✧", name: "Cargas de Éter", copy: "Amplifica em 50% o dano de um ataque. Pacote com 50.", currency: "gold", price: 260, amount: 50 },
+    scrolls: { icon: "▤", name: "Pergaminho de enchant", copy: "Necessário para uma tentativa comum.", currency: "gold", price: 950, amount: 1 },
+    blessed: { icon: "✦", name: "Pergaminho selado", copy: "Protege o equipamento da quebra.", currency: "gems", price: 22, amount: 1 }
+  };
 
   function createStarterItem(slot, name, stats) {
-    return { id: makeId(), slot, name, rarity: "common", enchant: 0, ...stats };
+    return { id: makeId(), slot, name, rarity: "common", grade: "D", enchant: 0, ...stats };
+  }
+
+  function starterEquipment(archetype) {
+    const weapons = {
+      vanguard: createStarterItem("weapon", "Espada de Recruta", { attack: 8, defense: 0, crit: 1 }),
+      ranger: createStarterItem("weapon", "Arco de Recruta", { attack: 7, defense: 0, crit: 2.2 }),
+      arcanist: createStarterItem("weapon", "Cetro de Recruta", { attack: 9, defense: 0, crit: .5 })
+    };
+    return {
+      weapon: weapons[archetype] || weapons.vanguard,
+      helmet: null,
+      chest: createStarterItem("chest", "Cota de Couro Gasta", { attack: 0, defense: 6, crit: 0 }),
+      gloves: null,
+      boots: createStarterItem("boots", "Botas de Viagem", { attack: 0, defense: 2, crit: .4 }),
+      necklace: null,
+      ring: null,
+      cloak: null
+    };
   }
 
   function initialState() {
     return {
-      version: 1,
-      lastSeen: Date.now(),
-      running: true,
-      sound: false,
-      zoneIndex: 0,
-      gold: 240,
-      gems: 25,
-      potions: 3,
-      level: 1,
-      xp: 0,
-      hp: 108,
-      kills: 0,
-      enchantAttempts: 0,
-      arenaWins: 0,
-      arenaLosses: 0,
-      arenaPoints: 1000,
-      claimedMissions: [],
-      inventory: [],
-      equipment: {
-        weapon: createStarterItem("weapon", "Espada de Recruta", { attack: 7, defense: 0, crit: 1 }),
-        armor: createStarterItem("armor", "Cota de Couro Gasta", { attack: 0, defense: 5, crit: 0 }),
-        helmet: null,
-        ring: null
-      }
+      version: 2, created: false, name: "Kael", race: "valdren", archetype: "vanguard",
+      classTier: 0, classPath: null, finalClass: null,
+      attributes: { str: 0, dex: 0, con: 0, int: 0, wit: 0 }, attributePoints: 0,
+      lastSeen: Date.now(), running: true, sound: false, speed: 1, zoneIndex: 0,
+      targetMode: "any", autoPotion: true, autoEther: false,
+      gold: 420, gems: 35, honor: 0, potions: 8, etherCharges: 80, scrolls: 4, blessedScrolls: 1, useBlessedScroll: false,
+      level: 1, xp: 0, hp: 0, mp: 0, kills: 0, skillUses: 0, enchantAttempts: 0,
+      arenaWins: 0, arenaLosses: 0, arenaPoints: 1000,
+      pvpKills: 0, karma: 0, territoryWins: 0, territoryCooldownUntil: 0,
+      clan: { joined: false, name: "", influence: 0 },
+      worldBossWins: 0, bossCooldownUntil: 0,
+      activeBuffs: { furyUntil: 0, wardUntil: 0 },
+      marketPurchases: 0, claimedMissions: [], inventory: [],
+      equipment: starterEquipment("vanguard")
     };
   }
 
-  function loadState() {
+  function normalizeItem(item, fallbackSlot) {
+    if (!item) return null;
+    return {
+      id: item.id || makeId(), slot: item.slot === "armor" ? "chest" : (item.slot || fallbackSlot),
+      name: item.name || "Equipamento antigo", rarity: RARITIES[item.rarity] ? item.rarity : "common",
+      grade: GRADES[item.grade] ? item.grade : "D", enchant: Number(item.enchant || 0),
+      attack: Number(item.attack || 0), defense: Number(item.defense || 0), crit: Number(item.crit || 0)
+    };
+  }
+
+  function normalizeState(saved) {
     const fresh = initialState();
+    const merged = {
+      ...fresh, ...saved, version: 2,
+      attributes: { ...fresh.attributes, ...(saved.attributes || {}) },
+      activeBuffs: { ...fresh.activeBuffs, ...(saved.activeBuffs || {}) },
+      clan: { ...fresh.clan, ...(saved.clan || {}) },
+      claimedMissions: Array.isArray(saved.claimedMissions) ? saved.claimedMissions : [],
+      inventory: Array.isArray(saved.inventory) ? saved.inventory.map((item) => normalizeItem(item, item.slot)) : []
+    };
+    merged.equipment = {};
+    Object.keys(SLOT_META).forEach((slot) => {
+      const source = saved.equipment && (saved.equipment[slot] || (slot === "chest" ? saved.equipment.armor : null));
+      merged.equipment[slot] = normalizeItem(source, slot);
+    });
+    return merged;
+  }
+
+  function migrateLegacy(legacy) {
+    const fresh = initialState();
+    return normalizeState({
+      ...fresh, ...legacy, version: 2, created: true, name: "Kael", race: "valdren", archetype: "vanguard",
+      classTier: 0, classPath: null, finalClass: null, honor: legacy.arenaPoints || 0,
+      etherCharges: 80, scrolls: 4, blessedScrolls: 1,
+      equipment: legacy.equipment || fresh.equipment
+    });
+  }
+
+  function loadState() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (!saved || saved.version !== 1) return fresh;
-      return {
-        ...fresh,
-        ...saved,
-        equipment: { ...fresh.equipment, ...(saved.equipment || {}) },
-        inventory: Array.isArray(saved.inventory) ? saved.inventory : [],
-        claimedMissions: Array.isArray(saved.claimedMissions) ? saved.claimedMissions : []
-      };
+      if (saved && saved.version === 2) return normalizeState(saved);
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY));
+      if (legacy && legacy.version === 1) return migrateLegacy(legacy);
     } catch {
-      return fresh;
+      return initialState();
     }
+    return initialState();
   }
 
   let state = loadState();
@@ -139,7 +252,11 @@
   let selectedInventoryId = null;
   let inventoryFilter = "all";
   let forgeSlot = "weapon";
+  let conflictTab = "boss";
+  let draftRace = state.race;
+  let draftArchetype = state.archetype;
   let audioContext = null;
+  const cooldowns = { classSkill: 0, buff: 0 };
 
   function saveState() {
     state.lastSeen = Date.now();
@@ -147,16 +264,60 @@
   }
 
   function xpNeeded(level = state.level) {
-    return Math.floor(92 * Math.pow(level, 1.32));
+    return Math.floor(88 * Math.pow(level, 1.29));
+  }
+
+  function gradeForLevel(level = state.level) {
+    let grade = "D";
+    GRADE_ORDER.forEach((key) => {
+      if (level >= GRADES[key].minLevel) grade = key;
+    });
+    return grade;
+  }
+
+  function nextGrade(grade) {
+    return GRADE_ORDER[Math.min(GRADE_ORDER.length - 1, GRADE_ORDER.indexOf(grade) + 1)];
+  }
+
+  function currentClassName() {
+    const archetype = ARCHETYPES[state.archetype] || ARCHETYPES.vanguard;
+    if (state.classTier === 0 || !state.classPath) return archetype.label;
+    const path = archetype.paths.find((entry) => entry.id === state.classPath);
+    if (state.classTier === 1 || !state.finalClass) return path ? path.name : archetype.label;
+    const final = (archetype.finals[state.classPath] || []).find((entry) => entry.id === state.finalClass);
+    return final ? final.name : (path ? path.name : archetype.label);
+  }
+
+  function classIcon() {
+    const archetype = ARCHETYPES[state.archetype] || ARCHETYPES.vanguard;
+    if (state.classTier === 2) {
+      const final = (archetype.finals[state.classPath] || []).find((entry) => entry.id === state.finalClass);
+      if (final) return final.icon;
+    }
+    if (state.classTier === 1) {
+      const path = archetype.paths.find((entry) => entry.id === state.classPath);
+      if (path) return path.icon;
+    }
+    return archetype.icon;
+  }
+
+  function attributeTotals() {
+    const base = { str: 8, dex: 8, con: 8, int: 8, wit: 8 };
+    const race = RACES[state.race] || RACES.valdren;
+    const archetype = ARCHETYPES[state.archetype] || ARCHETYPES.vanguard;
+    Object.keys(base).forEach((key) => {
+      base[key] += Number(race.bonus[key] || 0) + Number(archetype.bonus[key] || 0) + Number(state.attributes[key] || 0);
+    });
+    return base;
   }
 
   function itemStats(item) {
     if (!item) return { attack: 0, defense: 0, crit: 0 };
-    const enchantMultiplier = 1 + item.enchant * 0.115;
+    const enchantMultiplier = 1 + Number(item.enchant || 0) * .12;
     return {
-      attack: Math.round((item.attack || 0) * enchantMultiplier),
-      defense: Math.round((item.defense || 0) * enchantMultiplier),
-      crit: Number(((item.crit || 0) + item.enchant * 0.18).toFixed(1))
+      attack: Math.round(Number(item.attack || 0) * enchantMultiplier),
+      defense: Math.round(Number(item.defense || 0) * enchantMultiplier),
+      crit: Number((Number(item.crit || 0) + Number(item.enchant || 0) * .18).toFixed(1))
     };
   }
 
@@ -168,83 +329,99 @@
       total.crit += stats.crit;
       return total;
     }, { attack: 0, defense: 0, crit: 0 });
-
-    const attack = 10 + state.level * 3 + gear.attack;
-    const defense = 4 + state.level * 1.5 + gear.defense;
-    const crit = Math.min(42, 5 + gear.crit);
-    const maxHp = Math.round(90 + state.level * 18 + gear.defense * 2.5);
-    const power = Math.round(attack * 6 + defense * 4.5 + maxHp * .48 + crit * 3 + state.level * 18);
-    return { attack, defense, crit, maxHp, power };
+    const attributes = attributeTotals();
+    const archetype = state.archetype;
+    const primary = archetype === "arcanist" ? attributes.int : archetype === "ranger" ? attributes.dex : attributes.str;
+    const tierMultiplier = 1 + state.classTier * .085;
+    const fury = state.activeBuffs.furyUntil > Date.now() ? 1.2 : 1;
+    const ward = state.activeBuffs.wardUntil > Date.now() ? 1.22 : 1;
+    const attack = (8 + state.level * 2.7 + primary * 1.85 + gear.attack) * tierMultiplier * fury;
+    const defense = (4 + state.level * 1.25 + attributes.con * 1.42 + gear.defense) * ward;
+    const crit = Math.min(55, 3 + attributes.dex * .42 + gear.crit + (archetype === "ranger" ? 4 : 0));
+    const evasion = Math.min(38, 2 + attributes.dex * .3 + (archetype === "ranger" ? 3 : 0));
+    const maxHp = Math.round(78 + state.level * 16 + attributes.con * 10.5 + gear.defense * 2.4 + (archetype === "vanguard" ? 35 : 0));
+    const maxMp = Math.round(42 + state.level * 4 + attributes.int * 5.5 + attributes.wit * 4 + (archetype === "arcanist" ? 35 : 0));
+    const power = Math.round(attack * 6 + defense * 4.6 + maxHp * .44 + maxMp * .2 + crit * 3.2 + evasion * 2 + state.level * 20);
+    return { attack, defense, crit, evasion, maxHp, maxMp, power, attributes };
   }
 
-  function weightedRarity(zoneIndex = state.zoneIndex) {
+  function weightedRarity(bossDrop) {
     const roll = Math.random() * 100;
-    const bonus = zoneIndex * 2.2;
-    if (roll < 2 + bonus) return "legendary";
-    if (roll < 11 + bonus * 1.3) return "epic";
-    if (roll < 36 + bonus * 1.8) return "rare";
+    const zoneBonus = state.zoneIndex * 2.2 + (bossDrop ? 12 : 0);
+    if (roll < 2 + zoneBonus) return "legendary";
+    if (roll < 11 + zoneBonus * 1.2) return "epic";
+    if (roll < 36 + zoneBonus * 1.65) return "rare";
     return "common";
   }
 
-  function generateItem(forcedSlot = null) {
+  function generateItem(options = {}) {
     const slotKeys = Object.keys(SLOT_META);
-    const slot = forcedSlot || slotKeys[randomBetween(0, slotKeys.length - 1)];
-    const rarity = weightedRarity();
+    const slot = options.forcedSlot || slotKeys[randomBetween(0, slotKeys.length - 1)];
+    const rarity = options.forcedRarity || weightedRarity(options.bossDrop);
+    const naturalGrade = gradeForLevel();
+    const grade = options.forcedGrade || (options.bossDrop ? nextGrade(naturalGrade) : naturalGrade);
     const rarityData = RARITIES[rarity];
-    const zoneScale = 1 + state.zoneIndex * .65 + Math.max(0, state.level - 1) * .08;
-    const base = rarityData.multiplier * zoneScale;
+    const gradeData = GRADES[grade];
+    const levelScale = 1 + Math.max(0, state.level - gradeData.minLevel) * .018;
+    const base = rarityData.multiplier * gradeData.multiplier * levelScale;
     const suffixes = rarity === "legendary" ? ["do Eclipse", "da Chama Eterna"] : rarity === "epic" ? ["do Juramento", "Ancestral"] : ["", "do Vigia"];
     const baseName = ITEM_POOLS[slot][randomBetween(0, ITEM_POOLS[slot].length - 1)];
     const suffix = suffixes[randomBetween(0, suffixes.length - 1)];
     const stats = { attack: 0, defense: 0, crit: 0 };
-
     if (slot === "weapon") {
-      stats.attack = Math.max(5, Math.round(randomBetween(6, 11) * base));
+      stats.attack = Math.max(6, Math.round(randomBetween(7, 12) * base));
       stats.crit = Number((randomBetween(4, 14) / 10 * rarityData.multiplier).toFixed(1));
-    } else if (slot === "armor") {
-      stats.defense = Math.max(4, Math.round(randomBetween(5, 10) * base));
-    } else if (slot === "helmet") {
-      stats.defense = Math.max(2, Math.round(randomBetween(3, 7) * base));
-      stats.crit = Number((randomBetween(1, 7) / 10 * rarityData.multiplier).toFixed(1));
+    } else if (["chest", "helmet", "gloves", "boots", "cloak"].includes(slot)) {
+      const slotFactor = slot === "chest" ? 1 : slot === "helmet" ? .7 : .48;
+      stats.defense = Math.max(2, Math.round(randomBetween(5, 10) * base * slotFactor));
+      stats.crit = slot === "gloves" || slot === "boots" ? Number((randomBetween(1, 8) / 10 * rarityData.multiplier).toFixed(1)) : 0;
     } else {
       stats.attack = Math.max(1, Math.round(randomBetween(1, 4) * base));
       stats.crit = Number((randomBetween(6, 18) / 10 * rarityData.multiplier).toFixed(1));
     }
+    return { id: makeId(), slot, name: baseName + (suffix ? " " + suffix : ""), rarity, grade, enchant: 0, ...stats };
+  }
 
-    return {
-      id: makeId(),
-      slot,
-      name: `${baseName}${suffix ? ` ${suffix}` : ""}`,
-      rarity,
-      enchant: 0,
-      ...stats
-    };
+  function enchantVisual(item) {
+    const level = Number(item && item.enchant || 0);
+    if (level >= 10) return { size: "23px", color: "rgba(238,72,46,.78)" };
+    if (level >= 7) return { size: "18px", color: "rgba(71,151,245,.72)" };
+    if (level >= 4) return { size: "13px", color: "rgba(91,209,139,.62)" };
+    return { size: "0px", color: "transparent" };
+  }
+
+  function itemStyle(item) {
+    const rarity = RARITIES[item.rarity];
+    const glow = enchantVisual(item);
+    return "--rarity:" + rarity.color + ";--glow-size:" + glow.size + ";--glow-color:" + glow.color;
+  }
+
+  function targetRank() {
+    const roll = Math.random();
+    if (state.targetMode === "boss") return roll < .32 ? "boss" : roll < .68 ? "elite" : "common";
+    if (state.targetMode === "elite") return roll < .08 ? "boss" : roll < .62 ? "elite" : "common";
+    return roll < .035 ? "boss" : roll < .16 ? "elite" : "common";
   }
 
   function spawnEnemy() {
     const zone = ZONES[state.zoneIndex];
-    const level = randomBetween(zone.range[0], Math.min(zone.range[1], Math.max(zone.range[0] + 1, state.level + 1)));
-    const eliteRoll = Math.random();
-    const rank = eliteRoll < .035 ? "boss" : eliteRoll < .15 ? "elite" : "common";
-    const multiplier = rank === "boss" ? 3.2 : rank === "elite" ? 1.65 : 1;
-    const name = rank === "boss" ? `Alfa ${zone.enemies[0]}` : zone.enemies[randomBetween(0, zone.enemies.length - 1)];
-    const maxHp = Math.round(zone.baseHp * (1 + (level - zone.range[0]) * .16) * multiplier);
-
+    const upperLevel = Math.min(zone.range[1], Math.max(zone.range[0] + 1, state.level + 1));
+    const level = randomBetween(zone.range[0], upperLevel);
+    const rank = targetRank();
+    const multiplier = rank === "boss" ? 3.4 : rank === "elite" ? 1.72 : 1;
+    const baseName = zone.enemies[randomBetween(0, zone.enemies.length - 1)];
+    const name = rank === "boss" ? "Alfa " + baseName : rank === "elite" ? baseName + " Veterano" : baseName;
+    const maxHp = Math.round(zone.baseHp * (1 + (level - zone.range[0]) * .105) * multiplier);
     enemy = {
-      name,
-      level,
-      rank,
-      maxHp,
-      hp: maxHp,
-      attack: Math.round(zone.baseAttack * (1 + (level - zone.range[0]) * .12) * (rank === "boss" ? 1.7 : rank === "elite" ? 1.28 : 1)),
-      defense: Math.round(level * 1.1 + (rank === "boss" ? 5 : rank === "elite" ? 2 : 0)),
-      exp: Math.round(zone.exp * multiplier * (1 + (level - zone.range[0]) * .08)),
-      gold: Math.round(zone.gold * multiplier * (1 + (level - zone.range[0]) * .08))
+      name, level, rank, maxHp, hp: maxHp,
+      attack: Math.round(zone.baseAttack * (1 + (level - zone.range[0]) * .075) * (rank === "boss" ? 1.78 : rank === "elite" ? 1.3 : 1)),
+      defense: Math.round(level * 1.18 + (rank === "boss" ? 12 : rank === "elite" ? 5 : 0)),
+      exp: Math.round(zone.exp * multiplier * (1 + (level - zone.range[0]) * .045)),
+      gold: Math.round(zone.gold * multiplier * (1 + (level - zone.range[0]) * .045))
     };
-
     const entity = $("#enemyEntity");
     entity.classList.remove("defeated", "hit", "attack");
-    entity.style.filter = `${zone.tint} ${rank === "elite" ? "brightness(1.15)" : rank === "boss" ? "saturate(1.35) brightness(1.12)" : ""}`;
+    entity.style.filter = zone.tint + (rank === "elite" ? " brightness(1.14)" : rank === "boss" ? " saturate(1.35) brightness(1.12)" : "");
     entity.style.transform = rank === "boss" ? "scale(1.12)" : "";
     renderHud();
   }
@@ -256,11 +433,14 @@
       state.xp -= xpNeeded();
       state.level += 1;
       levelsGained += 1;
+      if (state.level % 5 === 0) state.attributePoints += 1;
     }
     if (levelsGained > 0) {
-      state.hp = playerStats().maxHp;
+      const stats = playerStats();
+      state.hp = stats.maxHp;
+      state.mp = stats.maxMp;
       if (!quiet) {
-        showActivity(`Nível ${state.level} alcançado! Seus atributos foram restaurados.`);
+        showActivity("Nível " + state.level + " alcançado. Seus atributos foram restaurados.");
         showLevelUp();
         playTone("level");
       }
@@ -271,53 +451,68 @@
   function showLevelUp() {
     const heading = $(".zone-heading");
     const original = heading.innerHTML;
-    heading.innerHTML = `<span>EVOLUÇÃO</span><strong>NÍVEL ${state.level}</strong><small>Seu poder aumentou</small>`;
+    heading.innerHTML = "<div class='zone-channel'><span>EVOLUÇÃO</span></div><strong>NÍVEL " + state.level + "</strong><small>Novo ponto ou especialização disponível</small>";
     heading.style.animation = "none";
     void heading.offsetWidth;
     heading.style.animation = "zoneEnter .5s ease both";
     setTimeout(() => {
       heading.innerHTML = original;
       renderHud();
-    }, 2100);
+    }, 2200);
   }
 
-  function combatTick() {
-    if (!state.running || combatLocked || !enemy) return;
+  function playerAttack(multiplier = 1, label = "", force = false) {
+    if ((!state.running && !force) || combatLocked || !enemy || !state.created) return false;
     combatLocked = true;
     const stats = playerStats();
     const crit = Math.random() * 100 < stats.crit;
-    const rawDamage = stats.attack * (.86 + Math.random() * .29) * (crit ? 1.75 : 1);
-    const damage = Math.max(1, Math.round(rawDamage - enemy.defense * .36));
-
+    let etherMultiplier = 1;
+    if (state.autoEther && state.etherCharges > 0) {
+      state.etherCharges -= 1;
+      etherMultiplier = 1.5;
+      $("#heroAura").classList.add("active");
+      setTimeout(() => $("#heroAura").classList.remove("active"), 420);
+    }
+    const rawDamage = stats.attack * (.86 + Math.random() * .29) * (crit ? 1.76 : 1) * multiplier * etherMultiplier;
+    const damage = Math.max(1, Math.round(rawDamage - enemy.defense * .34));
     animatePlayerAttack(damage, crit);
     enemy.hp = Math.max(0, enemy.hp - damage);
+    state.mp = Math.min(stats.maxMp, state.mp + Math.max(1, Math.round(stats.maxMp * .015)));
+    if (label) showActivity(label + " atingiu " + enemy.name + " por " + damage + ".");
     renderHud();
-
     if (enemy.hp <= 0) {
-      setTimeout(handleEnemyDefeat, 260);
-      return;
+      setTimeout(handleEnemyDefeat, Math.round(240 / state.speed));
+      return true;
     }
-
     setTimeout(() => {
-      if (enemy.hp > 0) enemyAttack();
-    }, 430);
+      if (enemy && enemy.hp > 0) enemyAttack();
+    }, Math.round(410 / state.speed));
+    setTimeout(() => { combatLocked = false; }, Math.round(720 / state.speed));
+    return true;
+  }
 
-    setTimeout(() => { combatLocked = false; }, 770);
+  function combatTick() {
+    playerAttack(1, "", false);
   }
 
   function enemyAttack() {
     const stats = playerStats();
-    const damage = Math.max(1, Math.round(enemy.attack * (.85 + Math.random() * .28) - stats.defense * .34));
+    if (Math.random() * 100 < stats.evasion) {
+      showDamage("ESQUIVA", false, true);
+      combatLocked = false;
+      return;
+    }
+    const damage = Math.max(1, Math.round(enemy.attack * (.85 + Math.random() * .28) - stats.defense * .33));
     state.hp = Math.max(0, state.hp - damage);
     const entity = $("#enemyEntity");
     entity.classList.remove("attack");
     void entity.offsetWidth;
     entity.classList.add("attack");
-    setTimeout(() => $("#heroEntity").classList.add("hit"), 115);
-    setTimeout(() => $("#heroEntity").classList.remove("hit"), 350);
+    setTimeout(() => $("#heroEntity").classList.add("hit"), 100);
+    setTimeout(() => $("#heroEntity").classList.remove("hit"), 320);
     showDamage(damage, false, true);
+    if (state.autoPotion && state.potions > 0 && state.hp / stats.maxHp <= .35) usePotion(true);
     renderHud();
-
     if (state.hp <= 0) handlePlayerDefeat();
   }
 
@@ -335,14 +530,14 @@
       flash.classList.add("show");
       showDamage(damage, crit, false);
       playTone(crit ? "crit" : "hit");
-    }, 180);
-    setTimeout(() => target.classList.remove("hit"), 410);
+    }, Math.round(170 / state.speed));
+    setTimeout(() => target.classList.remove("hit"), Math.round(390 / state.speed));
   }
 
   function showDamage(value, crit, fromEnemy) {
     const node = document.createElement("span");
-    node.className = `damage-number${crit ? " crit" : ""}${fromEnemy ? " enemy-damage" : ""}`;
-    node.textContent = `${crit ? "CRIT " : ""}-${value}`;
+    node.className = "damage-number" + (crit ? " crit" : "") + (fromEnemy ? " enemy-damage" : "");
+    node.textContent = typeof value === "string" ? value : (crit ? "CRIT -" : "-") + value;
     $("#damageLayer").appendChild(node);
     setTimeout(() => node.remove(), 850);
   }
@@ -350,33 +545,38 @@
   function handleEnemyDefeat() {
     $("#enemyEntity").classList.add("defeated");
     state.kills += 1;
+    state.karma = Math.max(0, state.karma - 2);
     state.gold += enemy.gold;
     addExperience(enemy.exp);
-    state.hp = Math.min(playerStats().maxHp, state.hp + Math.round(playerStats().maxHp * .08));
-    showActivity(`${enemy.name} derrotado · +${enemy.exp} EXP · +${enemy.gold} ouro`);
-
-    const lootChance = enemy.rank === "boss" ? 1 : enemy.rank === "elite" ? .78 : .46;
+    const stats = playerStats();
+    state.hp = Math.min(stats.maxHp, state.hp + Math.round(stats.maxHp * .08));
+    state.mp = Math.min(stats.maxMp, state.mp + Math.round(stats.maxMp * .07));
+    showActivity(enemy.name + " derrotado · +" + enemy.exp + " EXP · +" + enemy.gold + " ouro");
+    const lootChance = enemy.rank === "boss" ? 1 : enemy.rank === "elite" ? .8 : .45;
     if (Math.random() < lootChance) {
-      const item = generateItem();
+      const item = generateItem({ bossDrop: enemy.rank === "boss" });
       state.inventory.unshift(item);
-      if (state.inventory.length > 40) state.inventory.pop();
+      if (state.inventory.length > 60) state.inventory.pop();
       showLoot(item);
     }
-
+    if (Math.random() < (enemy.rank === "boss" ? .55 : .08)) state.scrolls += 1;
+    state.etherCharges += enemy.rank === "boss" ? randomBetween(8, 16) : randomBetween(0, 3);
     saveState();
     renderHud();
     setTimeout(() => {
       spawnEnemy();
       combatLocked = false;
-    }, 780);
+    }, Math.round(720 / state.speed));
   }
 
   function handlePlayerDefeat() {
     state.running = false;
     $("#heroEntity").classList.add("defeated");
-    showActivity("Kael foi derrotado e está se recuperando no acampamento...");
+    showActivity(escapeHtml(state.name) + " foi derrotado e retornará ao assentamento.");
     setTimeout(() => {
-      state.hp = Math.round(playerStats().maxHp * .72);
+      const stats = playerStats();
+      state.hp = Math.round(stats.maxHp * .72);
+      state.mp = Math.round(stats.maxMp * .72);
       state.running = true;
       $("#heroEntity").classList.remove("defeated");
       renderHud();
@@ -389,7 +589,8 @@
     const rarity = RARITIES[item.rarity];
     const toast = $("#lootToast");
     $("#lootToastIcon").textContent = SLOT_META[item.slot].icon;
-    $("#lootToastName").textContent = `${item.name}${item.enchant ? ` +${item.enchant}` : ""}`;
+    $("#lootToastName").textContent = item.name + (item.enchant ? " +" + item.enchant : "");
+    $("#lootToastGrade").textContent = GRADES[item.grade].label + " · " + rarity.label;
     toast.style.setProperty("--loot-color", rarity.color);
     toast.classList.remove("show");
     void toast.offsetWidth;
@@ -398,161 +599,328 @@
   }
 
   function showActivity(text) {
-    $("#activityText").textContent = text;
+    $("#activityText").textContent = String(text).replace(/&[^;]+;/g, "");
+  }
+
+  function buffRemaining(until) {
+    return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  }
+
+  function renderBuffs() {
+    const buffs = [];
+    if (state.activeBuffs.furyUntil > Date.now()) buffs.push({ icon: "⚔", name: "Fúria Rúnica", seconds: buffRemaining(state.activeBuffs.furyUntil) });
+    if (state.activeBuffs.wardUntil > Date.now()) buffs.push({ icon: "◇", name: "Barreira do Véu", seconds: buffRemaining(state.activeBuffs.wardUntil) });
+    $("#buffStrip").innerHTML = buffs.length ? buffs.map((buff) => "<span class='buff-icon' title='" + buff.name + "'>" + buff.icon + "<small>" + buff.seconds + "</small></span>").join("") : "<span class='buff-empty'>Nenhum efeito ativo</span>";
   }
 
   function renderHud() {
     const stats = playerStats();
-    const maxHp = stats.maxHp;
-    state.hp = clamp(state.hp, 0, maxHp);
-    const xpTarget = xpNeeded();
-    const xpPercent = clamp(state.xp / xpTarget * 100, 0, 100);
-    const hpPercent = clamp(state.hp / maxHp * 100, 0, 100);
+    state.hp = clamp(state.hp, 0, stats.maxHp);
+    state.mp = clamp(state.mp, 0, stats.maxMp);
     const zone = ZONES[state.zoneIndex];
-
+    const xpPercent = clamp(state.xp / xpNeeded() * 100, 0, 100);
+    const hpPercent = clamp(state.hp / stats.maxHp * 100, 0, 100);
+    const mpPercent = clamp(state.mp / stats.maxMp * 100, 0, 100);
+    const safeName = escapeHtml(state.name);
     $("#goldValue").textContent = formatNumber(state.gold);
     $("#gemValue").textContent = formatNumber(state.gems);
+    $("#honorValue").textContent = formatNumber(state.honor);
     $("#levelValue").textContent = state.level;
-    $("#heroLevelFloat").textContent = `Nv. ${state.level}`;
-    $("#powerValue").textContent = `Poder ${formatNumber(stats.power)}`;
+    $("#heroLevelFloat").textContent = "Nv. " + state.level;
+    $("#playerName").textContent = state.name;
+    $("#heroNameFloat").textContent = state.name;
+    $("#raceLabel").textContent = RACES[state.race].label;
+    $("#classLabel").textContent = currentClassName().toUpperCase();
+    $("#powerValue").textContent = "Poder " + formatNumber(stats.power);
     $("#attackValue").textContent = Math.round(stats.attack);
     $("#defenseValue").textContent = Math.round(stats.defense);
-    $("#critValue").textContent = `${stats.crit.toFixed(1)}%`;
-    $("#playerHpBar").style.width = `${hpPercent}%`;
-    $("#playerHpText").textContent = `${Math.round(state.hp)} / ${maxHp}`;
-    $("#playerXpBar").style.width = `${xpPercent}%`;
-    $("#playerXpText").textContent = `${Math.floor(xpPercent)}%`;
+    $("#critValue").textContent = stats.crit.toFixed(1) + "%";
+    $("#playerHpBar").style.width = hpPercent + "%";
+    $("#playerHpText").textContent = Math.round(state.hp) + " / " + stats.maxHp;
+    $("#playerMpBar").style.width = mpPercent + "%";
+    $("#playerMpText").textContent = Math.round(state.mp) + " / " + stats.maxMp;
+    $("#playerXpBar").style.width = xpPercent + "%";
+    $("#playerXpText").textContent = Math.floor(xpPercent) + "%";
     $("#killValue").textContent = formatNumber(state.kills);
+    $("#karmaValue").textContent = formatNumber(state.karma);
+    $("#karmaValue").classList.toggle("danger", state.karma > 0);
     $("#potionCount").textContent = state.potions;
+    $("#etherCount").textContent = state.etherCharges;
+    $("#etherStatus").textContent = state.autoEther ? "AUTOMÁTICA" : "DESATIVADA";
+    $("#etherToggle").classList.toggle("active", state.autoEther);
     $("#inventoryBadge").textContent = state.inventory.length;
     $("#inventoryBadge").dataset.empty = state.inventory.length === 0;
     $("#soundToggle").classList.toggle("muted", !state.sound);
-
+    $("#autoPotionToggle").checked = state.autoPotion;
+    $("#targetModeLabel").textContent = { any: "QUALQUER ALVO", elite: "ELITES", boss: "CHEFES" }[state.targetMode];
+    $("#gradeBadge").textContent = "GRAU " + gradeForLevel();
     $("#zoneTitle").textContent = zone.title;
     $("#zoneSubtitle").textContent = zone.subtitle;
     $("#zoneButtonText").textContent = zone.title;
-
+    $("#world").style.setProperty("--zone-bg", "url('" + zone.background + "')");
+    $("#pvpZoneFlag").textContent = zone.pvp ? "ZONA DE CONFLITO" : "ZONA SEGURA";
+    $("#pvpZoneFlag").classList.toggle("danger", zone.pvp);
+    const promotionReady = (state.level >= 20 && state.classTier === 0) || (state.level >= 40 && state.classTier === 1);
+    $("#classBadge").dataset.empty = !promotionReady;
+    $("#conflictBadge").textContent = Date.now() >= state.bossCooldownUntil ? "!" : "";
+    $("#conflictBadge").dataset.empty = Date.now() < state.bossCooldownUntil;
     if (enemy) {
       const enemyPercent = clamp(enemy.hp / enemy.maxHp * 100, 0, 100);
       const rankLabel = enemy.rank === "boss" ? "CHEFE" : enemy.rank === "elite" ? "ELITE" : "COMUM";
       $("#enemyName").textContent = enemy.name;
       $("#enemyNameFloat").textContent = enemy.name;
-      $("#enemyLevel").textContent = `Nv. ${enemy.level}`;
-      $("#enemyLevelFloat").textContent = `Nv. ${enemy.level}`;
+      $("#enemyLevel").textContent = "Nv. " + enemy.level;
+      $("#enemyLevelFloat").textContent = "Nv. " + enemy.level;
       $("#enemyRarity").textContent = rankLabel;
       $("#enemyRarity").style.color = enemy.rank === "boss" ? RARITIES.legendary.color : enemy.rank === "elite" ? RARITIES.epic.color : "#aab0b5";
-      $("#enemyHpBar").style.width = `${enemyPercent}%`;
-      $("#enemyHpText").textContent = `${Math.ceil(enemy.hp)} / ${enemy.maxHp}`;
-      $("#enemyReward").textContent = `${enemy.exp} EXP · ${enemy.gold} ouro`;
+      $("#enemyHpBar").style.width = enemyPercent + "%";
+      $("#enemyHpText").textContent = Math.ceil(enemy.hp) + " / " + enemy.maxHp;
+      $("#enemyReward").textContent = enemy.exp + " EXP · " + enemy.gold + " ouro";
     }
-
     const auto = $("#autoToggle");
     auto.classList.toggle("active", state.running);
     auto.querySelector("small").textContent = state.running ? "ATIVADA" : "PAUSADA";
+    $("#combatModeText").textContent = state.running ? "MODO AUTOMÁTICO" : "MODO MANUAL";
+    $$(".speed").forEach((button) => button.classList.toggle("active", Number(button.dataset.speed) === state.speed));
+    renderBuffs();
     renderEquipmentStrip();
-    updateMissionBadge();
+    renderSkillBar();
   }
 
   function renderEquipmentStrip() {
     $("#equipmentStrip").innerHTML = Object.entries(SLOT_META).map(([slot, meta]) => {
       const item = state.equipment[slot];
-      const color = item ? RARITIES[item.rarity].color : "#687079";
-      return `<button class="gear-slot ${item ? "filled" : ""}" data-open-slot="${slot}" data-label="${meta.label}" style="--rarity:${color}" title="${item ? item.name : `Slot de ${meta.label}`}">
-        <span class="gear-icon">${meta.icon}</span>${item?.enchant ? `<small>+${item.enchant}</small>` : ""}
-      </button>`;
+      const style = item ? itemStyle(item) : "--rarity:#657078";
+      return "<button class='gear-slot " + (item ? "filled" : "") + "' data-open-slot='" + slot + "' style='" + style + "' title='" + escapeHtml(item ? item.name : meta.label) + "'><span class='gear-icon'>" + meta.icon + "</span>" + (item && item.enchant ? "<small>+" + item.enchant + "</small>" : "") + "</button>";
     }).join("");
   }
 
+  function skillDefinitions() {
+    const archetype = ARCHETYPES[state.archetype];
+    return [
+      { id: "attack", key: "1", icon: archetype.icon, name: "Ataque", count: "" },
+      { id: "class", key: "2", icon: "✦", name: archetype.skill, count: "18 MP" },
+      { id: "potion", key: "3", icon: "✚", name: "Poção rubra", count: state.potions },
+      { id: "ether", key: "4", icon: "✧", name: "Carga de Éter", count: state.etherCharges },
+      { id: "buff", key: "5", icon: "◇", name: "Fúria Rúnica", count: "25 MP" },
+      { id: "boss", key: "6", icon: "♛", name: "Chefe mundial", count: "" }
+    ];
+  }
+
+  function renderSkillBar() {
+    if (!$("#skillBar")) return;
+    $("#skillBar").innerHTML = skillDefinitions().map((skill) => {
+      const cooldownKey = skill.id === "class" ? "classSkill" : skill.id === "buff" ? "buff" : null;
+      const seconds = cooldownKey ? Math.max(0, Math.ceil((cooldowns[cooldownKey] - Date.now()) / 1000)) : 0;
+      const active = skill.id === "ether" && state.autoEther;
+      return "<button class='skill-slot " + (active ? "active " : "") + (seconds ? "cooldown" : "") + "' data-skill='" + skill.id + "' data-cooldown='" + (seconds || "") + "' title='" + skill.name + "'><small>" + skill.key + "</small><span class='skill-icon'>" + skill.icon + "</span><b>" + skill.count + "</b></button>";
+    }).join("");
+  }
+
+  function useSkill(id) {
+    const stats = playerStats();
+    if (id === "attack") playerAttack(1, "", true);
+    if (id === "class") {
+      if (cooldowns.classSkill > Date.now() || state.mp < 18) return;
+      if (playerAttack(2.15 + state.classTier * .18, ARCHETYPES[state.archetype].skill, true)) {
+        state.mp -= 18;
+        state.skillUses += 1;
+        cooldowns.classSkill = Date.now() + 8000;
+        playTone("crit");
+      }
+    }
+    if (id === "potion") usePotion(false);
+    if (id === "ether") {
+      state.autoEther = !state.autoEther;
+      showActivity("Cargas de Éter " + (state.autoEther ? "ativadas para cada ataque." : "desativadas."));
+    }
+    if (id === "buff") {
+      if (cooldowns.buff > Date.now() || state.mp < 25) return;
+      state.mp -= 25;
+      state.activeBuffs.furyUntil = Date.now() + 60000;
+      state.activeBuffs.wardUntil = Date.now() + 60000;
+      cooldowns.buff = Date.now() + 30000;
+      state.skillUses += 1;
+      showActivity("Fúria Rúnica e Barreira do Véu ativas por 60 segundos.");
+      playTone("level");
+    }
+    if (id === "boss") {
+      openDrawer("conflict");
+      renderConflict("boss");
+    }
+    saveState();
+    renderHud();
+  }
+
+  function drawerTitle(view) {
+    return {
+      character: ["FICHA E PROGRESSÃO", "Personagem"],
+      inventory: ["EQUIPAMENTO", "Inventário e paper doll"],
+      forge: ["APRIMORAMENTO", "Forja Rúnica"],
+      market: ["ECONOMIA DE VALDORA", "Mercado"],
+      conflict: ["PVP E MUNDO", "Conflitos"],
+      missions: ["JORNADA", "Missões"],
+      zones: ["MAPA DE VALDORA", "Regiões de caça"]
+    }[view];
+  }
+
   function openDrawer(view) {
-    $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+    $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
     if (view === "hunt") {
       closeDrawer();
       return;
     }
-
-    const titles = {
-      inventory: ["PERSONAGEM", "Inventário"],
-      forge: ["APRIMORAMENTO", "Forja das Brasas"],
-      coliseum: ["PVP ASSÍNCRONO", "Coliseu"],
-      missions: ["JORNADA", "Missões"]
-    };
-    $("#drawerEyebrow").textContent = titles[view][0];
-    $("#drawerTitle").textContent = titles[view][1];
+    const title = drawerTitle(view);
+    $("#drawerEyebrow").textContent = title[0];
+    $("#drawerTitle").textContent = title[1];
     $("#drawer").dataset.view = view;
     $("#drawer").classList.add("open");
     $("#drawer").setAttribute("aria-hidden", "false");
-
+    if (view === "character") renderCharacter();
     if (view === "inventory") renderInventory();
     if (view === "forge") renderForge();
-    if (view === "coliseum") renderColiseum();
+    if (view === "market") renderMarket();
+    if (view === "conflict") renderConflict();
     if (view === "missions") renderMissions();
+    if (view === "zones") renderZones();
   }
 
   function closeDrawer() {
     $("#drawer").classList.remove("open");
     $("#drawer").setAttribute("aria-hidden", "true");
-    $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.view === "hunt"));
+    $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === "hunt"));
+  }
+
+  function promotionReady() {
+    return (state.level >= 20 && state.classTier === 0) || (state.level >= 40 && state.classTier === 1);
+  }
+
+  function renderCharacter() {
+    const stats = playerStats();
+    const attrs = stats.attributes;
+    const archetype = ARCHETYPES[state.archetype];
+    const race = RACES[state.race];
+    const nextLevel = state.classTier === 0 ? 20 : state.classTier === 1 ? 40 : null;
+    const promotion = promotionReady()
+      ? "<div class='promotion-card'><div class='promotion-icon'>" + classIcon() + "</div><div><h3>Especialização disponível</h3><p>Seu treinamento permite escolher um novo caminho de classe.</p></div><button class='gold-button' data-open-promotion>ESCOLHER CLASSE</button></div>"
+      : "<div class='promotion-card'><div class='promotion-icon'>" + (state.classTier === 2 ? "✦" : "⌛") + "</div><div><h3>" + (state.classTier === 2 ? "Classe máxima alcançada" : "Próxima promoção no nível " + nextLevel) + "</h3><p>" + (state.classTier === 2 ? "Sua especialização final está ativa." : "Continue caçando para abrir novas especializações.") + "</p></div></div>";
+    const treeNodes = [
+      { tier: 0, name: archetype.label, active: state.classTier === 0 },
+      { tier: 1, name: state.classPath ? currentTierOneName() : "Especialização Nv. 20", active: state.classTier === 1, locked: !state.classPath },
+      { tier: 2, name: state.finalClass ? currentClassName() : "Especialização Nv. 40", active: state.classTier === 2, locked: !state.finalClass }
+    ].map((node) => "<div class='class-node " + (node.active ? "active " : "") + (node.locked ? "locked" : "") + "'><small>CLASSE " + node.tier + "</small><strong>" + escapeHtml(node.name) + "</strong></div>").join("");
+    const attributeNames = { str: "FOR", dex: "DES", con: "CON", int: "INT", wit: "ESP" };
+    const attributeHtml = Object.keys(attributeNames).map((key) => "<div class='attribute-card'><small>" + attributeNames[key] + "</small><strong>" + attrs[key] + "</strong><button data-attribute='" + key + "' " + (state.attributePoints <= 0 ? "disabled" : "") + ">+</button></div>").join("");
+    $("#drawerContent").innerHTML =
+      "<div class='character-banner'><div class='portrait-frame'><img src='assets/duskblade.png' alt='Retrato'></div><div><small style='color:var(--gold)'>" + escapeHtml(race.label.toUpperCase()) + " · " + escapeHtml(currentClassName().toUpperCase()) + "</small><h3>" + escapeHtml(state.name) + "</h3><p>Poder " + formatNumber(stats.power) + " · Evasão " + stats.evasion.toFixed(1) + "% · Grau " + gradeForLevel() + "</p></div><div class='level-orb'>" + state.level + "</div></div>" +
+      "<div class='section-kicker'>ATRIBUTOS · " + state.attributePoints + " PONTOS DISPONÍVEIS</div><div class='attribute-grid'>" + attributeHtml + "</div>" +
+      "<div class='section-kicker'>CAMINHO DE CLASSE</div>" + promotion + "<div class='class-tree' style='margin-top:8px'>" + treeNodes + "</div>" +
+      "<div class='section-kicker'>HABILIDADES ATIVAS</div><div class='skill-list'>" +
+      "<div class='skill-info'><span>" + archetype.icon + "</span><div><strong>Ataque de " + archetype.label + "</strong><small>Ataque básico adaptado ao seu arquétipo.</small></div></div>" +
+      "<div class='skill-info'><span>✦</span><div><strong>" + archetype.skill + "</strong><small>Golpe especial por 18 MP e recarga de 8s.</small></div></div>" +
+      "<div class='skill-info'><span>◇</span><div><strong>Fúria Rúnica</strong><small>+20% ataque e +22% defesa por 60s.</small></div></div>" +
+      "<div class='skill-info'><span>✧</span><div><strong>Carga de Éter</strong><small>Consumível original que amplifica cada ataque em 50%.</small></div></div></div>" +
+      "<div class='section-kicker'>JORNADA</div><button class='dark-button' data-view='missions'>VER MISSÕES E RECOMPENSAS</button>" +
+      "<div class='button-row'><button class='dark-button' data-recreate>REFAZER PERSONAGEM</button><button class='dark-button' data-presentation>ATIVAR MODO APRESENTAÇÃO</button></div>";
+  }
+
+  function currentTierOneName() {
+    const path = ARCHETYPES[state.archetype].paths.find((entry) => entry.id === state.classPath);
+    return path ? path.name : ARCHETYPES[state.archetype].label;
+  }
+
+  function openPromotion() {
+    if (!promotionReady()) return;
+    const archetype = ARCHETYPES[state.archetype];
+    const choices = state.classTier === 0 ? archetype.paths : (archetype.finals[state.classPath] || []);
+    const tierLabel = state.classTier === 0 ? "PRIMEIRA ESPECIALIZAÇÃO" : "ESPECIALIZAÇÃO FINAL";
+    const html = choices.map((choice) => "<button class='choice-card' data-promote='" + choice.id + "'><span>" + choice.icon + "</span><div><strong>" + choice.name + "</strong><small>" + choice.copy + "</small></div><b>›</b></button>").join("");
+    showModal("<div class='modal-crest'><span>" + classIcon() + "</span></div><h2>" + tierLabel + "</h2><p>Esta escolha define o próximo ramo de habilidades do seu personagem.</p><div class='choice-list'>" + html + "</div>");
+  }
+
+  function promoteClass(id) {
+    const archetype = ARCHETYPES[state.archetype];
+    if (state.classTier === 0 && state.level >= 20 && archetype.paths.some((entry) => entry.id === id)) {
+      state.classPath = id;
+      state.classTier = 1;
+    } else if (state.classTier === 1 && state.level >= 40 && (archetype.finals[state.classPath] || []).some((entry) => entry.id === id)) {
+      state.finalClass = id;
+      state.classTier = 2;
+    } else return;
+    state.attributePoints += 2;
+    const stats = playerStats();
+    state.hp = stats.maxHp;
+    state.mp = stats.maxMp;
+    closeModal();
+    showActivity("Promoção concluída: " + currentClassName() + ".");
+    playTone("legendary");
+    saveState();
+    renderHud();
+    renderCharacter();
+  }
+
+  function allocateAttribute(key) {
+    if (state.attributePoints <= 0 || !Object.prototype.hasOwnProperty.call(state.attributes, key)) return;
+    state.attributes[key] += 1;
+    state.attributePoints -= 1;
+    saveState();
+    renderHud();
+    renderCharacter();
+  }
+
+  function renderPaperDoll() {
+    return "<div class='paper-doll'><div class='paper-figure'></div>" + Object.entries(SLOT_META).map(([slot, meta]) => {
+      const item = state.equipment[slot];
+      return "<button class='paper-slot " + (item ? "filled" : "") + "' data-paper-slot='" + slot + "' style='" + (item ? itemStyle(item) : "--rarity:#657078") + "'><span>" + meta.icon + "</span><small>" + (item ? escapeHtml(item.name) : meta.label) + "</small>" + (item && item.enchant ? "<b>+" + item.enchant + "</b>" : "") + "</button>";
+    }).join("") + "</div>";
   }
 
   function renderInventory(selectedId = selectedInventoryId) {
     selectedInventoryId = selectedId;
-    const selected = state.inventory.find(item => item.id === selectedId);
-    const filtered = inventoryFilter === "all" ? state.inventory : state.inventory.filter(item => item.slot === inventoryFilter);
-    const filters = [{ id: "all", label: "Todos" }, ...Object.entries(SLOT_META).map(([id, meta]) => ({ id, label: meta.label }))];
-    const filterHtml = `<div class="inventory-toolbar">${filters.map(filter => `<button class="filter-chip ${inventoryFilter === filter.id ? "active" : ""}" data-filter="${filter.id}">${filter.label}</button>`).join("")}</div>`;
-
-    const selectedHtml = selected ? renderItemDetail(selected) : "";
-    const gridHtml = filtered.length ? `<div class="inventory-grid">${filtered.map(item => {
+    const selected = state.inventory.find((item) => item.id === selectedId);
+    const filtered = inventoryFilter === "all" ? state.inventory : state.inventory.filter((item) => item.slot === inventoryFilter);
+    const filters = "<button class='filter-button " + (inventoryFilter === "all" ? "active" : "") + "' data-filter='all'>TODOS</button>" + Object.entries(SLOT_META).map(([slot, meta]) => "<button class='filter-button " + (inventoryFilter === slot ? "active" : "") + "' data-filter='" + slot + "'>" + meta.icon + " " + meta.label.toUpperCase() + "</button>").join("");
+    const cards = filtered.length ? "<div class='inventory-grid'>" + filtered.map((item) => {
       const rarity = RARITIES[item.rarity];
-      return `<button class="item-card" data-item-id="${item.id}" style="--rarity:${rarity.color}">
-        ${item.enchant ? `<span class="enchant-tag">+${item.enchant}</span>` : ""}
-        <span class="item-icon">${SLOT_META[item.slot].icon}</span>
-        <strong>${item.name}</strong><small>${rarity.label} · ${SLOT_META[item.slot].label}</small>
-      </button>`;
-    }).join("")}</div>` : `<div class="empty-state"><span>◇</span><strong>Nenhum item aqui</strong><p>Continue caçando para encontrar equipamentos.</p></div>`;
-
-    $("#drawerContent").innerHTML = `<p class="section-copy">Compare os drops encontrados e monte sua combinação de poder. O inventário deste protótipo comporta 40 itens.</p>${selectedHtml}${filterHtml}${gridHtml}`;
+      return "<button class='item-card " + (item.id === selectedId ? "selected" : "") + "' data-item-id='" + item.id + "' style='" + itemStyle(item) + "'><span class='grade-chip' style='--grade-color:" + GRADES[item.grade].color + "'>" + item.grade + "</span><span class='item-icon'>" + SLOT_META[item.slot].icon + "</span><strong>" + escapeHtml(item.name) + (item.enchant ? " +" + item.enchant : "") + "</strong><small>" + rarity.label + "</small></button>";
+    }).join("") + "</div>" : "<div class='empty-state'><span>◇</span><strong>Nenhum item aqui</strong><p>Continue caçando ou visite o mercado.</p></div>";
+    const detail = selected ? renderItemDetail(selected) : "";
+    $("#drawerContent").innerHTML = "<p class='section-copy'>Equipe oito slots no paper doll. Graus superiores exigem níveis 20, 40, 60 e 80.</p><div class='inventory-layout'>" + renderPaperDoll() + "<div class='inventory-side'>" + detail + "<div class='inventory-toolbar'>" + filters + "</div>" + cards + "</div></div>";
   }
 
   function renderItemDetail(item) {
     const rarity = RARITIES[item.rarity];
+    const grade = GRADES[item.grade];
     const stats = itemStats(item);
     const equipped = state.equipment[item.slot];
     const compare = equipped ? itemStats(equipped) : { attack: 0, defense: 0, crit: 0 };
-    const sellValue = itemSellValue(item);
-    return `<div class="item-detail" style="--rarity:${rarity.color}; margin-bottom:14px">
-      <div class="item-detail-icon">${SLOT_META[item.slot].icon}</div>
-      <div>
-        <small style="color:${rarity.color}">${rarity.label.toUpperCase()} · ${SLOT_META[item.slot].label.toUpperCase()}</small>
-        <h3>${item.name}${item.enchant ? ` +${item.enchant}` : ""}</h3>
-        <p>${equipped ? `Comparando com ${equipped.name}${equipped.enchant ? ` +${equipped.enchant}` : ""}.` : "Nenhum item equipado neste slot."}</p>
-      </div>
-      <div style="grid-column:1/-1">
-        <div class="item-stat-list">
-          ${stats.attack ? `<div><span>Ataque</span><strong>${stats.attack} <em style="color:${stats.attack >= compare.attack ? "#67bd88" : "#c86b65"}">${signed(stats.attack - compare.attack)}</em></strong></div>` : ""}
-          ${stats.defense ? `<div><span>Defesa</span><strong>${stats.defense} <em style="color:${stats.defense >= compare.defense ? "#67bd88" : "#c86b65"}">${signed(stats.defense - compare.defense)}</em></strong></div>` : ""}
-          ${stats.crit ? `<div><span>Crítico</span><strong>${stats.crit.toFixed(1)}% <em style="color:${stats.crit >= compare.crit ? "#67bd88" : "#c86b65"}">${signed(stats.crit - compare.crit, "%")}</em></strong></div>` : ""}
-        </div>
-        <div class="button-row"><button class="gold-button" data-equip-item="${item.id}">EQUIPAR</button><button class="danger-button" data-sell-item="${item.id}">VENDER · ${sellValue} ●</button></div>
-      </div>
-    </div>`;
+    const locked = state.level < grade.minLevel;
+    return "<div class='item-detail' style='" + itemStyle(item) + ";margin-bottom:10px'><div class='item-detail-icon'>" + SLOT_META[item.slot].icon + "</div><div><small style='color:" + rarity.color + "'>" + rarity.label.toUpperCase() + " · " + grade.label.toUpperCase() + "</small><h3>" + escapeHtml(item.name) + (item.enchant ? " +" + item.enchant : "") + "</h3><p>" + (locked ? "Requer nível " + grade.minLevel + "." : equipped ? "Comparando com " + escapeHtml(equipped.name) + "." : "Slot livre para equipar.") + "</p></div><div style='grid-column:1/-1'><div class='item-stat-list'>" +
+      (stats.attack ? "<div><span>Ataque</span><strong>" + stats.attack + " <em style='color:" + (stats.attack >= compare.attack ? "#67bd88" : "#c86b65") + "'>" + signed(stats.attack - compare.attack) + "</em></strong></div>" : "") +
+      (stats.defense ? "<div><span>Defesa</span><strong>" + stats.defense + " <em style='color:" + (stats.defense >= compare.defense ? "#67bd88" : "#c86b65") + "'>" + signed(stats.defense - compare.defense) + "</em></strong></div>" : "") +
+      (stats.crit ? "<div><span>Crítico</span><strong>" + stats.crit.toFixed(1) + "% <em style='color:" + (stats.crit >= compare.crit ? "#67bd88" : "#c86b65") + "'>" + signed(stats.crit - compare.crit, "%") + "</em></strong></div>" : "") +
+      "</div><div class='button-row'><button class='gold-button' data-equip-item='" + item.id + "' " + (locked ? "disabled" : "") + ">EQUIPAR</button><button class='danger-button' data-sell-item='" + item.id + "'>VENDER · " + itemSellValue(item) + " ●</button></div></div></div>";
   }
 
   function signed(value, suffix = "") {
     const rounded = Math.round(value * 10) / 10;
-    return `${rounded > 0 ? "+" : ""}${rounded}${suffix}`;
+    return (rounded > 0 ? "+" : "") + rounded + suffix;
   }
 
   function equipItem(id) {
-    const index = state.inventory.findIndex(item => item.id === id);
+    const index = state.inventory.findIndex((item) => item.id === id);
     if (index < 0) return;
-    const item = state.inventory.splice(index, 1)[0];
+    const item = state.inventory[index];
+    if (state.level < GRADES[item.grade].minLevel) return;
+    state.inventory.splice(index, 1);
     const old = state.equipment[item.slot];
     state.equipment[item.slot] = item;
     if (old) state.inventory.unshift(old);
     selectedInventoryId = null;
-    state.hp = Math.min(state.hp, playerStats().maxHp);
-    showActivity(`${item.name} foi equipado.`);
+    const stats = playerStats();
+    state.hp = Math.min(state.hp, stats.maxHp);
+    state.mp = Math.min(state.mp, stats.maxMp);
+    showActivity(item.name + " foi equipado.");
     playTone("equip");
     saveState();
     renderHud();
@@ -560,73 +928,77 @@
   }
 
   function itemSellValue(item) {
-    return Math.round(20 * RARITIES[item.rarity].multiplier * (1 + state.zoneIndex * .4) * (1 + item.enchant * .45));
+    return Math.round(24 * RARITIES[item.rarity].multiplier * GRADES[item.grade].multiplier * (1 + item.enchant * .48));
   }
 
   function sellItem(id) {
-    const index = state.inventory.findIndex(item => item.id === id);
+    const index = state.inventory.findIndex((item) => item.id === id);
     if (index < 0) return;
     const item = state.inventory[index];
     const value = itemSellValue(item);
     state.gold += value;
     state.inventory.splice(index, 1);
     selectedInventoryId = null;
-    showActivity(`${item.name} vendido por ${value} ouro.`);
+    showActivity(item.name + " vendido por " + value + " ouro.");
     saveState();
     renderHud();
     renderInventory();
   }
 
+  function enchantChance(level) {
+    return [100, 95, 86, 76, 63, 50, 38, 27, 18, 11, 7, 4][Math.min(level, 11)];
+  }
+
+  function enchantCost(item) {
+    return Math.round(90 * (item.enchant + 1) * RARITIES[item.rarity].multiplier * GRADES[item.grade].multiplier * (1 + item.enchant * .33));
+  }
+
   function renderForge() {
     const slots = Object.keys(SLOT_META);
-    if (!state.equipment[forgeSlot]) forgeSlot = slots.find(slot => state.equipment[slot]) || "weapon";
+    if (!state.equipment[forgeSlot]) forgeSlot = slots.find((slot) => state.equipment[slot]) || "weapon";
     const item = state.equipment[forgeSlot];
     const rarity = item ? RARITIES[item.rarity] : RARITIES.common;
     const chance = item ? enchantChance(item.enchant) : 0;
     const cost = item ? enchantCost(item) : 0;
-    const maxed = item?.enchant >= 10;
-
-    $("#drawerContent").innerHTML = `<p class="section-copy">Fortaleça equipamentos usando ouro. Até +5 a falha não reduz o enchant; a partir do +6, existe risco de perder um nível.</p>
-      <div class="forge-altar" style="--rarity:${rarity.color}">
-        ${item ? `<div class="forge-item">${SLOT_META[item.slot].icon}</div><small>${rarity.label.toUpperCase()} · ${SLOT_META[item.slot].label.toUpperCase()}</small><h3>${item.name} ${item.enchant ? `+${item.enchant}` : "+0"}</h3>
-        <div class="forge-chance"><div><span>Chance de sucesso</span><strong>${maxed ? "MÁXIMO" : `${chance}%`}</strong></div><div class="chance-track"><i style="width:${maxed ? 100 : chance}%"></i></div></div>
-        <div class="forge-cost"><span>Custo da tentativa</span><strong>${formatNumber(cost)} ouro</strong></div>
-        <button class="gold-button" style="width:100%" data-enchant ${state.gold < cost || maxed ? "disabled" : ""}>${maxed ? "ENCHANT MÁXIMO" : `TENTAR +${item.enchant + 1}`}</button>` : `<div class="empty-state"><strong>Nenhum equipamento</strong></div>`}
-      </div>
-      <div class="forge-slots">${slots.map(slot => {
+    const maxed = item && item.enchant >= 12;
+    const risky = item && item.enchant >= 4 && !state.useBlessedScroll;
+    const scrollCount = state.useBlessedScroll ? state.blessedScrolls : state.scrolls;
+    $("#drawerContent").innerHTML =
+      "<p class='section-copy'>Cada tentativa consome ouro e um pergaminho. Após +4, uma falha comum quebra o equipamento; o pergaminho selado evita a quebra e reduz um nível.</p><div class='forge-layout'><div class='forge-altar' style='" + (item ? itemStyle(item) : "--rarity:#687079") + "'>" +
+      (item ? "<div class='forge-item'>" + SLOT_META[item.slot].icon + "</div><small>" + rarity.label.toUpperCase() + " · " + GRADES[item.grade].label.toUpperCase() + "</small><h3>" + escapeHtml(item.name) + " +" + item.enchant + "</h3><div class='forge-chance'><div><span>Chance de sucesso</span><strong>" + (maxed ? "MÁXIMO" : chance + "%") + "</strong></div><div class='chance-track'><i style='width:" + (maxed ? 100 : chance) + "%'></i></div></div><div class='forge-cost'><span>" + (risky ? "RISCO: QUEBRA DO ITEM" : state.useBlessedScroll ? "Proteção contra quebra ativa" : "Zona segura até +4") + "</span><strong>" + formatNumber(cost) + " ouro</strong></div><button class='" + (risky ? "danger-button" : "gold-button") + "' style='width:100%' data-enchant " + (state.gold < cost || maxed || scrollCount <= 0 ? "disabled" : "") + ">" + (maxed ? "ENCHANT MÁXIMO" : "TENTAR +" + (item.enchant + 1)) + "</button>" : "<div class='empty-state'><strong>Nenhum equipamento</strong></div>") +
+      "</div><div><div class='scroll-choice'><button class='scroll-card " + (!state.useBlessedScroll ? "active" : "") + "' data-scroll-type='normal'><span>▤</span><div><strong>Comum</strong><small>Falha após +4 quebra o item.</small></div><b>" + state.scrolls + "</b></button><button class='scroll-card " + (state.useBlessedScroll ? "active" : "") + "' data-scroll-type='blessed'><span>✦</span><div><strong>Selado</strong><small>Evita quebra; pode reduzir 1 nível.</small></div><b>" + state.blessedScrolls + "</b></button></div><div class='forge-slots'>" + slots.map((slot) => {
         const equipped = state.equipment[slot];
-        const color = equipped ? RARITIES[equipped.rarity].color : "#687079";
-        return `<button class="forge-slot ${forgeSlot === slot ? "active" : ""}" data-forge-slot="${slot}" style="--rarity:${color}" ${!equipped ? "disabled" : ""}><span>${SLOT_META[slot].icon}</span><strong>${equipped ? `${SLOT_META[slot].label} ${equipped.enchant ? `+${equipped.enchant}` : "+0"}` : "Vazio"}</strong></button>`;
-      }).join("")}</div>`;
-  }
-
-  function enchantChance(level) {
-    return [100, 92, 84, 74, 62, 48, 34, 23, 14, 8][Math.min(level, 9)];
-  }
-
-  function enchantCost(item) {
-    return Math.round(75 * (item.enchant + 1) * RARITIES[item.rarity].multiplier * (1 + item.enchant * .36));
+        return "<button class='forge-slot " + (forgeSlot === slot ? "active" : "") + "' data-forge-slot='" + slot + "' style='--rarity:" + (equipped ? RARITIES[equipped.rarity].color : "#687079") + "' " + (!equipped ? "disabled" : "") + "><span>" + SLOT_META[slot].icon + "</span><strong>" + (equipped ? SLOT_META[slot].label + " +" + equipped.enchant : "Vazio") + "</strong></button>";
+      }).join("") + "</div><button class='dark-button' style='width:100%;margin-top:8px' data-view='market'>COMPRAR PERGAMINHOS</button></div></div>";
   }
 
   function attemptEnchant() {
     const item = state.equipment[forgeSlot];
-    if (!item || item.enchant >= 10) return;
+    if (!item || item.enchant >= 12) return;
     const cost = enchantCost(item);
-    if (state.gold < cost) return;
+    const usingBlessed = state.useBlessedScroll;
+    if (state.gold < cost || (usingBlessed ? state.blessedScrolls : state.scrolls) <= 0) return;
     state.gold -= cost;
+    if (usingBlessed) state.blessedScrolls -= 1;
+    else state.scrolls -= 1;
     state.enchantAttempts += 1;
     const success = Math.random() * 100 < enchantChance(item.enchant);
     if (success) {
       item.enchant += 1;
-      showActivity(`${item.name} alcançou +${item.enchant}!`);
+      showActivity(item.name + " alcançou +" + item.enchant + ".");
       playTone(item.enchant >= 7 ? "legendary" : "level");
-      flashForgeResult(true, `ENCHANT +${item.enchant}`, "A chama respondeu ao seu chamado.");
-    } else {
-      const lostLevel = item.enchant >= 6;
-      if (lostLevel) item.enchant -= 1;
-      showActivity(`A tentativa de enchant falhou${lostLevel ? ` e o item voltou para +${item.enchant}` : ""}.`);
+      flashForgeResult(true, "ENCHANT +" + item.enchant, item.enchant >= 10 ? "A arma irradia uma aura carmesim." : "As runas aceitaram o aprimoramento.");
+    } else if (!usingBlessed && item.enchant >= 4) {
+      const brokenName = item.name + " +" + item.enchant;
+      state.equipment[forgeSlot] = null;
+      showActivity(brokenName + " se partiu durante o enchant.");
       playTone("fail");
-      flashForgeResult(false, "FALHA NA FORJA", lostLevel ? `O equipamento regrediu para +${item.enchant}.` : "O equipamento não perdeu nível.");
+      flashForgeResult(false, "EQUIPAMENTO QUEBRADO", brokenName + " foi destruído. Pergaminhos selados evitam esse risco.");
+    } else {
+      if (usingBlessed && item.enchant > 0) item.enchant -= 1;
+      showActivity("A tentativa de enchant falhou.");
+      playTone("fail");
+      flashForgeResult(false, "FALHA NA FORJA", usingBlessed ? "O selo protegeu o item, mas o enchant regrediu para +" + item.enchant + "." : "O equipamento permaneceu intacto.");
     }
     saveState();
     renderHud();
@@ -634,35 +1006,125 @@
   }
 
   function flashForgeResult(success, title, copy) {
-    showModal(`<div class="modal-crest"><span>${success ? "✦" : "×"}</span></div><h2>${title}</h2><p>${copy}</p><button class="${success ? "gold-button" : "dark-button"}" style="width:100%" data-close-modal>CONTINUAR</button>`);
+    showModal("<div class='modal-crest'><span>" + (success ? "✦" : "×") + "</span></div><h2>" + title + "</h2><p>" + escapeHtml(copy) + "</p><button class='" + (success ? "gold-button" : "dark-button") + "' style='width:100%' data-close-modal>CONTINUAR</button>");
   }
 
-  function renderColiseum() {
+  function marketTax() {
+    return Math.min(.25, state.karma / 2000 * .25);
+  }
+
+  function productPrice(product) {
+    return Math.round(product.price * (1 + marketTax()));
+  }
+
+  function renderMarket() {
+    const tax = Math.round(marketTax() * 100);
+    const productHtml = Object.entries(MARKET_PRODUCTS).map(([id, product]) => {
+      const price = productPrice(product);
+      const balance = product.currency === "gems" ? state.gems : state.gold;
+      const currencyIcon = product.currency === "gems" ? "◆" : "●";
+      return "<div class='market-card'><span>" + product.icon + "</span><div><h3>" + product.name + "</h3><p>" + product.copy + "</p></div><button class='gold-button' data-buy-product='" + id + "' " + (balance < price ? "disabled" : "") + ">" + formatNumber(price) + " " + currencyIcon + "</button></div>";
+    }).join("");
+    const listings = [
+      { grade: gradeForLevel(), rarity: "rare", slot: "weapon", price: 1800 },
+      { grade: nextGrade(gradeForLevel()), rarity: "epic", slot: "chest", price: 4200 }
+    ].map((listing, index) => "<div class='market-card'><span>" + SLOT_META[listing.slot].icon + "</span><div><h3>" + (index ? "Couraça do Mercador" : "Arma de caravana") + "</h3><p>" + GRADES[listing.grade].label + " · " + RARITIES[listing.rarity].label + " · oferta simulada</p></div><button class='dark-button' data-buy-listing='" + index + "' data-grade='" + listing.grade + "' data-rarity='" + listing.rarity + "' data-slot='" + listing.slot + "' data-price='" + listing.price + "' " + (state.gold < listing.price ? "disabled" : "") + ">" + formatNumber(listing.price) + " ●</button></div>").join("");
+    $("#drawerContent").innerHTML = "<p class='section-copy'>Compre suprimentos, pergaminhos e equipamentos de outros aventureiros. Karma elevado aumenta as taxas do mercado.</p><div class='market-summary'><div class='summary-box'><small>OURO</small><strong>" + formatNumber(state.gold) + "</strong></div><div class='summary-box'><small>TAXA DE KARMA</small><strong>" + tax + "%</strong></div><div class='summary-box'><small>COMPRAS</small><strong>" + state.marketPurchases + "</strong></div></div><div class='section-kicker'>SUPRIMENTOS</div><div class='market-grid'>" + productHtml + "</div><div class='section-kicker'>OFERTAS DE JOGADORES</div><div class='market-grid'>" + listings + "</div>";
+  }
+
+  function buyProduct(id) {
+    const product = MARKET_PRODUCTS[id];
+    if (!product) return;
+    const price = productPrice(product);
+    if (state[product.currency] < price) return;
+    state[product.currency] -= price;
+    if (id === "potions") state.potions += product.amount;
+    if (id === "ether") state.etherCharges += product.amount;
+    if (id === "scrolls") state.scrolls += product.amount;
+    if (id === "blessed") state.blessedScrolls += product.amount;
+    state.marketPurchases += 1;
+    showActivity(product.name + " adquirido no mercado.");
+    playTone("equip");
+    saveState();
+    renderHud();
+    renderMarket();
+  }
+
+  function buyListing(button) {
+    const price = Number(button.dataset.price);
+    if (state.gold < price || state.inventory.length >= 60) return;
+    state.gold -= price;
+    const item = generateItem({ forcedGrade: button.dataset.grade, forcedRarity: button.dataset.rarity, forcedSlot: button.dataset.slot });
+    state.inventory.unshift(item);
+    state.marketPurchases += 1;
+    showLoot(item);
+    saveState();
+    renderHud();
+    renderMarket();
+  }
+
+  function renderConflict(tab = conflictTab) {
+    conflictTab = tab;
+    const tabs = [["boss", "CHEFE MUNDIAL"], ["conclave", "CONCLAVE"], ["clan", "CLÃ E TERRITÓRIO"]].map(([id, label]) => "<button class='conflict-tab " + (tab === id ? "active" : "") + "' data-conflict-tab='" + id + "'>" + label + "</button>").join("");
+    let content = "";
+    if (tab === "boss") content = renderBossPanel();
+    if (tab === "conclave") content = renderConclave();
+    if (tab === "clan") content = renderClanWar();
+    $("#drawerContent").innerHTML = "<div class='conflict-tabs'>" + tabs + "</div>" + content;
+  }
+
+  function renderBossPanel() {
+    const stats = playerStats();
+    const remaining = Math.max(0, Math.ceil((state.bossCooldownUntil - Date.now()) / 1000));
+    const recommended = Math.max(650, Math.round(stats.power * 1.08));
+    return "<div class='boss-raid'><div class='boss-art'></div><div class='boss-title'><small>EVENTO DE MUNDO · EXPEDIÇÃO DE 12 HERÓIS</small><h3>Soberano das Brasas</h3><p>Uma criatura original de obsidiana despertou sob a Cratera das Cinzas.</p></div><div class='raid-stats'><div><small>PODER RECOMENDADO</small><strong>" + formatNumber(recommended) + "</strong></div><div><small>SEU PODER</small><strong>" + formatNumber(stats.power) + "</strong></div><div><small>VITÓRIAS</small><strong>" + state.worldBossWins + "</strong></div></div><div class='boss-actions'><button class='danger-button' style='width:100%' data-world-boss " + (remaining ? "disabled" : "") + ">" + (remaining ? "NOVA EXPEDIÇÃO EM " + remaining + "s" : "ENTRAR NA EXPEDIÇÃO") + "</button></div></div><div class='section-kicker'>DROP RARO</div><p class='section-copy'>A vitória garante um equipamento lendário e pode antecipar o próximo grau disponível.</p>";
+  }
+
+  function challengeWorldBoss() {
+    if (Date.now() < state.bossCooldownUntil) return;
+    const stats = playerStats();
+    const groupPower = stats.power * (7.8 + Math.random() * 4.8);
+    const bossPower = stats.power * (8.6 + Math.random() * 3.6);
+    const win = groupPower >= bossPower;
+    if (win) {
+      state.worldBossWins += 1;
+      state.gold += 3500 + state.level * 90;
+      state.gems += 28;
+      state.honor += 240;
+      const item = generateItem({ bossDrop: true, forcedRarity: "legendary" });
+      state.inventory.unshift(item);
+      state.bossCooldownUntil = Date.now() + 180000;
+      showLoot(item);
+    } else {
+      state.bossCooldownUntil = Date.now() + 30000;
+    }
+    saveState();
+    renderHud();
+    renderConflict("boss");
+    playTone(win ? "legendary" : "fail");
+    showModal("<div class='modal-crest'><span>" + (win ? "♛" : "⚔") + "</span></div><h2>Expedição concluída</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "CHEFE DERROTADO" : "EXPEDIÇÃO RECUOU") + "</div><p>" + (win ? "O Soberano tombou. Você recebeu um drop lendário, ouro, cristais e honra." : "A linha de frente não resistiu. Reforce seu equipamento e reúna uma nova expedição.") + "</p><button class='dark-button' style='width:100%' data-close-modal>VOLTAR</button>");
+  }
+
+  function renderConclave() {
     const power = playerStats().power;
     const opponents = [
-      { name: "Mira da Névoa", className: "Arqueira Sombria", factor: .82, reward: 55 },
-      { name: "Boros Punho de Ferro", className: "Guardião", factor: 1.02, reward: 90 },
-      { name: "Lyra Cinza", className: "Oráculo das Brasas", factor: 1.27, reward: 145 }
-    ].map((opponent, index) => ({ ...opponent, power: Math.max(180, Math.round(power * opponent.factor + (index - 1) * 12)) }));
-
-    $("#drawerContent").innerHTML = `<p class="section-copy">Enfrente projeções de outros heróis. Neste protótipo, o duelo compara poder, equipamentos e uma pequena variação de combate.</p>
-      <div class="coliseum-score"><div class="score-box"><small>PONTOS DE HONRA</small><strong>${formatNumber(state.arenaPoints)}</strong></div><div class="score-box"><small>VITÓRIAS / DERROTAS</small><strong>${state.arenaWins} / ${state.arenaLosses}</strong></div></div>
-      <div class="opponent-list">${opponents.map((opponent, index) => `<div class="opponent-card">
-        <div class="opponent-rank">#${Math.max(1, 48 - state.arenaWins * 2 + index * 7)}</div>
-        <div><h3>${opponent.name}</h3><p>${opponent.className} · Poder ${formatNumber(opponent.power)}</p></div>
-        <button class="${opponent.power <= power ? "gold-button" : "dark-button"}" data-duel="${index}" data-power="${opponent.power}" data-reward="${opponent.reward}">DESAFIAR</button>
-      </div>`).join("")}</div>`;
+      { name: "Mira da Névoa", className: "Batedora da Névoa", factor: .84, reward: 220 },
+      { name: "Boros Punho de Ferro", className: "Guardião de Ferro", factor: 1.03, reward: 360 },
+      { name: "Lyra Cinza", className: "Adepta Rúnica", factor: 1.26, reward: 540 }
+    ].map((opponent, index) => ({ ...opponent, power: Math.max(180, Math.round(power * opponent.factor + index * 22)) }));
+    return "<p class='section-copy'>O Conclave é uma competição original de duelos assíncronos. Poder, classe e uma variação tática definem o resultado.</p><div class='score-row'><div class='score-box'><small>PONTOS DO CONCLAVE</small><strong>" + formatNumber(state.arenaPoints) + "</strong></div><div class='score-box'><small>HONRA</small><strong>" + formatNumber(state.honor) + "</strong></div><div class='score-box'><small>V / D</small><strong>" + state.arenaWins + " / " + state.arenaLosses + "</strong></div></div><div class='opponent-list'>" + opponents.map((opponent, index) => "<div class='opponent-card'><div class='opponent-rank'>#" + Math.max(1, 48 - state.arenaWins * 2 + index * 7) + "</div><div><h3>" + opponent.name + "</h3><p>" + opponent.className + " · Poder " + formatNumber(opponent.power) + "</p></div><button class='" + (opponent.power <= power ? "gold-button" : "dark-button") + "' data-duel='" + index + "' data-power='" + opponent.power + "' data-reward='" + opponent.reward + "'>DESAFIAR</button></div>").join("") + "</div>";
   }
 
   function duelOpponent(button) {
     const opponentPower = Number(button.dataset.power);
     const reward = Number(button.dataset.reward);
-    const myRoll = playerStats().power * (.82 + Math.random() * .36);
+    const myRoll = playerStats().power * (.82 + Math.random() * .38);
     const enemyRoll = opponentPower * (.84 + Math.random() * .32);
     const win = myRoll >= enemyRoll;
     if (win) {
       state.arenaWins += 1;
       state.arenaPoints += randomBetween(18, 31);
+      state.honor += randomBetween(22, 40);
       state.gold += reward;
     } else {
       state.arenaLosses += 1;
@@ -670,43 +1132,80 @@
     }
     saveState();
     renderHud();
-    renderColiseum();
+    renderConflict("conclave");
     playTone(win ? "level" : "fail");
-    showModal(`<div class="modal-crest"><span>${win ? "♜" : "⚔"}</span></div><h2>Duelo concluído</h2><div class="result-banner ${win ? "win" : "loss"}">${win ? "VITÓRIA" : "DERROTA"}</div><p>${win ? `Você conquistou honra e recebeu ${reward} de ouro.` : "Seu adversário venceu desta vez. Aprimore seu equipamento e tente novamente."}</p><button class="${win ? "gold-button" : "dark-button"}" style="width:100%" data-close-modal>VOLTAR AO COLISEU</button>`);
+    showModal("<div class='modal-crest'><span>" + (win ? "♜" : "⚔") + "</span></div><h2>Duelo concluído</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "VITÓRIA" : "DERROTA") + "</div><p>" + (win ? "Você conquistou honra, pontos do Conclave e " + reward + " de ouro." : "Seu adversário venceu. Aprimore os atributos e tente novamente.") + "</p><button class='dark-button' style='width:100%' data-close-modal>VOLTAR</button>");
+  }
+
+  function renderClanWar() {
+    const clanName = state.clan.joined ? state.clan.name : "Sem clã";
+    const territoryRemaining = Math.max(0, Math.ceil((state.territoryCooldownUntil - Date.now()) / 1000));
+    return "<p class='section-copy'>Clãs disputam influência nas fortalezas de Valdora. Abates hostis aumentam karma e a taxa do mercado.</p><div class='clan-card'><div class='clan-emblem'>⚜</div><div><h3>" + escapeHtml(clanName) + "</h3><p>" + (state.clan.joined ? "Influência " + state.clan.influence + " · membro da coalizão de Aurion." : "Junte-se a uma companhia para participar das guerras.") + "</p></div><button class='gold-button' data-join-clan " + (state.clan.joined ? "disabled" : "") + ">" + (state.clan.joined ? "MEMBRO" : "ENTRAR") + "</button></div><div class='territory-card'><div class='territory-icon'>⚑</div><div><h3>Guerra da Fortaleza de Aurion</h3><p>Evento simulado de território. Requer clã e recompensa influência.</p></div><button class='danger-button' data-territory-war " + (!state.clan.joined || territoryRemaining ? "disabled" : "") + ">" + (territoryRemaining ? territoryRemaining + "s" : "LUTAR") + "</button></div><div class='territory-card'><div class='territory-icon'>☠</div><div><h3>Caçada hostil</h3><p>Enfrente outro aventureiro no mundo aberto. +120 karma.</p></div><button class='dark-button' data-pk-hunt>ATACAR</button></div><div class='score-row' style='margin-top:9px'><div class='score-box'><small>ABATES PVP</small><strong>" + state.pvpKills + "</strong></div><div class='score-box'><small>KARMA</small><strong>" + state.karma + "</strong></div><div class='score-box'><small>VITÓRIAS TERRITORIAIS</small><strong>" + state.territoryWins + "</strong></div></div>";
+  }
+
+  function joinClan() {
+    if (state.clan.joined) return;
+    state.clan = { joined: true, name: "Sentinelas de Aurion", influence: 10 };
+    showActivity("Você entrou no clã Sentinelas de Aurion.");
+    playTone("level");
+    saveState();
+    renderConflict("clan");
+  }
+
+  function territoryWar() {
+    if (!state.clan.joined || Date.now() < state.territoryCooldownUntil) return;
+    const win = Math.random() < Math.min(.82, .46 + playerStats().power / 10000 + state.clan.influence / 1000);
+    state.territoryCooldownUntil = Date.now() + 90000;
+    if (win) {
+      state.territoryWins += 1;
+      state.clan.influence += 35;
+      state.honor += 120;
+      state.gold += 1800;
+    } else {
+      state.clan.influence = Math.max(0, state.clan.influence - 5);
+    }
+    saveState();
+    renderHud();
+    renderConflict("clan");
+    showModal("<div class='modal-crest'><span>⚑</span></div><h2>Guerra territorial</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "FORTALEZA CONQUISTADA" : "CERCO REPELIDO") + "</div><p>" + (win ? "Seu clã ganhou influência, honra e ouro." : "A defesa inimiga resistiu ao cerco desta vez.") + "</p><button class='dark-button' style='width:100%' data-close-modal>CONTINUAR</button>");
+  }
+
+  function pkHunt() {
+    const win = Math.random() < .62;
+    state.karma += 120;
+    if (win) {
+      state.pvpKills += 1;
+      state.gold += 520;
+      state.honor += 25;
+    }
+    saveState();
+    renderHud();
+    renderConflict("clan");
+    showModal("<div class='modal-crest'><span>☠</span></div><h2>Confronto no mundo aberto</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "ALVO DERROTADO" : "ALVO ESCAPOU") + "</div><p>Seu karma aumentou. Guardas e mercadores agora observam suas ações.</p><button class='dark-button' style='width:100%' data-close-modal>CONTINUAR</button>");
   }
 
   function missionValue(mission) {
     if (mission.field === "level") return state.level;
-    return state[mission.field] || 0;
+    return Number(state[mission.field] || 0);
   }
 
   function renderMissions() {
-    $("#drawerContent").innerHTML = `<p class="section-copy">Objetivos curtos para testar o ritmo de progressão e ensinar os sistemas principais.</p><div class="mission-list">${MISSIONS.map(mission => {
+    $("#drawerContent").innerHTML = "<p class='section-copy'>Objetivos da crônica apresentam os sistemas principais e concedem recursos.</p><div class='mission-list'>" + MISSIONS.map((mission) => {
       const value = missionValue(mission);
       const claimed = state.claimedMissions.includes(mission.id);
       const complete = value >= mission.goal;
       const progress = clamp(value / mission.goal * 100, 0, 100);
-      return `<div class="mission-card ${complete && !claimed ? "claimable" : ""}">
-        <div class="mission-icon">${mission.icon}</div>
-        <div><h3>${mission.title}</h3><p>${mission.copy} · ${Math.min(value, mission.goal)}/${mission.goal}</p><div class="mission-progress"><i style="width:${progress}%"></i></div></div>
-        <button class="${complete && !claimed ? "gold-button" : "dark-button"}" data-claim="${mission.id}" ${!complete || claimed ? "disabled" : ""}>${claimed ? "COLETADO" : complete ? `+${mission.gold} ●` : "EM CURSO"}</button>
-      </div>`;
-    }).join("")}</div>`;
-  }
-
-  function updateMissionBadge() {
-    const claimable = MISSIONS.filter(mission => missionValue(mission) >= mission.goal && !state.claimedMissions.includes(mission.id)).length;
-    $("#missionBadge").textContent = claimable;
-    $("#missionBadge").dataset.empty = claimable === 0;
+      return "<div class='mission-card " + (complete && !claimed ? "claimable" : "") + "'><div class='mission-icon'>" + mission.icon + "</div><div><h3>" + mission.title + "</h3><p>" + mission.copy + " · " + Math.min(value, mission.goal) + "/" + mission.goal + "</p><div class='mission-progress'><i style='width:" + progress + "%'></i></div></div><button class='" + (complete && !claimed ? "gold-button" : "dark-button") + "' data-claim='" + mission.id + "' " + (!complete || claimed ? "disabled" : "") + ">" + (claimed ? "COLETADO" : complete ? "+" + mission.gold + " ●" : "EM CURSO") + "</button></div>";
+    }).join("") + "</div>";
   }
 
   function claimMission(id) {
-    const mission = MISSIONS.find(entry => entry.id === id);
+    const mission = MISSIONS.find((entry) => entry.id === id);
     if (!mission || missionValue(mission) < mission.goal || state.claimedMissions.includes(id)) return;
     state.claimedMissions.push(id);
     state.gold += mission.gold;
     state.gems += mission.gems;
-    showActivity(`Missão concluída · +${mission.gold} ouro · +${mission.gems} cristais`);
+    showActivity("Missão concluída · +" + mission.gold + " ouro · +" + mission.gems + " cristais");
     playTone("loot");
     saveState();
     renderHud();
@@ -714,15 +1213,10 @@
   }
 
   function renderZones() {
-    $("#drawerEyebrow").textContent = "MAPA DE VALDORA";
-    $("#drawerTitle").textContent = "Regiões de caça";
-    $("#drawer").dataset.view = "zones";
-    $("#drawer").classList.add("open");
-    $("#drawer").setAttribute("aria-hidden", "false");
-    $("#drawerContent").innerHTML = `<p class="section-copy">Áreas mais perigosas entregam mais experiência, ouro e melhores chances de raridade.</p><div class="zone-list">${ZONES.map((zone, index) => {
+    $("#drawerContent").innerHTML = "<p class='section-copy'>Teleporte para áreas com novos graus, inimigos e regras de conflito.</p><div class='zone-list'>" + ZONES.map((zone, index) => {
       const locked = state.level < zone.unlock;
-      return `<div class="zone-card ${locked ? "locked" : ""} ${index === state.zoneIndex ? "active" : ""}" data-zone="${index}"><div class="zone-icon">${locked ? "⌁" : zone.icon}</div><div><h3>${zone.title}</h3><p>${zone.subtitle}${locked ? ` · Libera no Nv. ${zone.unlock}` : ""}</p></div><span>${index === state.zoneIndex ? "●" : "›"}</span></div>`;
-    }).join("")}</div>`;
+      return "<div class='zone-card " + (locked ? "locked " : "") + (index === state.zoneIndex ? "active" : "") + "' data-zone='" + index + "'><div class='zone-icon'>" + (locked ? "⌁" : zone.icon) + "</div><div><h3>" + zone.title + "</h3><p>" + zone.subtitle + (locked ? " · libera no Nv. " + zone.unlock : "") + "</p></div><span>" + (index === state.zoneIndex ? "●" : "›") + "</span></div>";
+    }).join("") + "</div>";
   }
 
   function selectZone(index) {
@@ -733,15 +1227,15 @@
     spawnEnemy();
     saveState();
     closeDrawer();
-    showActivity(`Caçada iniciada em ${zone.title}.`);
+    showActivity("Teleporte concluído: " + zone.title + ".");
   }
 
-  function usePotion() {
+  function usePotion(automatic) {
     const stats = playerStats();
     if (state.potions <= 0 || state.hp >= stats.maxHp) return;
     state.potions -= 1;
     state.hp = Math.min(stats.maxHp, state.hp + Math.round(stats.maxHp * .48));
-    showActivity("Poção utilizada · 48% do HP recuperado.");
+    showActivity((automatic ? "Poção automática" : "Poção") + " utilizada · 48% do HP recuperado.");
     playTone("potion");
     renderHud();
     saveState();
@@ -759,31 +1253,100 @@
   }
 
   function applyOfflineProgress() {
+    if (!state.created) return;
     const elapsedSeconds = Math.min(8 * 60 * 60, Math.max(0, (Date.now() - Number(state.lastSeen || Date.now())) / 1000));
     if (elapsedSeconds < 60) return;
     const zone = ZONES[state.zoneIndex];
     const stats = playerStats();
-    const estimatedSecondsPerKill = clamp(9.5 - stats.power / 600, 3.8, 9.5);
-    const kills = Math.max(1, Math.floor(elapsedSeconds / estimatedSecondsPerKill * .58));
-    const gold = Math.round(kills * zone.gold * .72);
-    const xp = Math.round(kills * zone.exp * .72);
-    const itemCount = Math.min(6, Math.floor(kills / 14));
+    const secondsPerKill = clamp(10.5 - stats.power / 900, 4.2, 10.5);
+    const kills = Math.max(1, Math.floor(elapsedSeconds / secondsPerKill * .55));
+    const gold = Math.round(kills * zone.gold * .68);
+    const xp = Math.round(kills * zone.exp * .68);
+    const itemCount = Math.min(6, Math.floor(kills / 18));
     const oldLevel = state.level;
     state.gold += gold;
     state.kills += kills;
     addExperience(xp, true);
-    for (let i = 0; i < itemCount && state.inventory.length < 40; i += 1) state.inventory.unshift(generateItem());
+    for (let i = 0; i < itemCount && state.inventory.length < 60; i += 1) state.inventory.unshift(generateItem());
     state.hp = playerStats().maxHp;
+    state.mp = playerStats().maxMp;
     saveState();
     setTimeout(() => {
-      showModal(`<div class="modal-crest"><span>☾</span></div><h2>Enquanto você esteve fora</h2><p>Kael continuou caçando por ${formatDuration(elapsedSeconds)} nas ${zone.title.toLowerCase()}.</p><div class="reward-summary"><div><span>ABATES</span><strong>${formatNumber(kills)}</strong></div><div><span>OURO</span><strong>${formatNumber(gold)}</strong></div><div><span>ITENS</span><strong>${itemCount}</strong></div></div>${state.level > oldLevel ? `<p style="color:var(--gold-light)">Você alcançou o nível ${state.level}.</p>` : ""}<button class="gold-button" style="width:100%" data-close-modal>COLETAR RECOMPENSAS</button>`);
-    }, 500);
+      showModal("<div class='modal-crest'><span>☾</span></div><h2>Enquanto você esteve fora</h2><p>" + escapeHtml(state.name) + " caçou por " + formatDuration(elapsedSeconds) + " em " + zone.title + ".</p><div class='score-row'><div class='score-box'><small>ABATES</small><strong>" + formatNumber(kills) + "</strong></div><div class='score-box'><small>OURO</small><strong>" + formatNumber(gold) + "</strong></div><div class='score-box'><small>ITENS</small><strong>" + itemCount + "</strong></div></div>" + (state.level > oldLevel ? "<p style='color:var(--gold-light)'>Você alcançou o nível " + state.level + ".</p>" : "") + "<button class='gold-button' style='width:100%' data-close-modal>COLETAR</button>");
+    }, 550);
   }
 
   function formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    return hours ? `${hours}h ${minutes}min` : `${Math.max(1, minutes)}min`;
+    return hours ? hours + "h " + minutes + "min" : Math.max(1, minutes) + "min";
+  }
+
+  function renderCreation() {
+    $("#creationScreen").classList.toggle("open", !state.created);
+    $("#creationScreen").setAttribute("aria-hidden", state.created ? "true" : "false");
+    if (state.created) return;
+    $("#characterNameInput").value = state.name || "Kael";
+    $("#raceGrid").innerHTML = Object.entries(RACES).map(([id, race]) => "<button class='creation-option " + (draftRace === id ? "active" : "") + "' data-race='" + id + "'><span>" + race.sigil + "</span><strong>" + race.label + "</strong><small>" + race.copy + "</small></button>").join("");
+    $("#archetypeGrid").innerHTML = Object.entries(ARCHETYPES).map(([id, archetype]) => "<button class='creation-option " + (draftArchetype === id ? "active" : "") + "' data-archetype='" + id + "'><span>" + archetype.icon + "</span><strong>" + archetype.label + "</strong><small>" + archetype.copy + "</small></button>").join("");
+    $("#creationSummary").innerHTML = "<strong>" + RACES[draftRace].label + " " + ARCHETYPES[draftArchetype].label + "</strong> · " + RACES[draftRace].copy + " " + ARCHETYPES[draftArchetype].copy;
+  }
+
+  function createCharacter() {
+    const name = $("#characterNameInput").value.trim().replace(/[<>]/g, "").slice(0, 16);
+    if (name.length < 3) {
+      $("#characterNameInput").focus();
+      return;
+    }
+    state.name = name;
+    state.race = draftRace;
+    state.archetype = draftArchetype;
+    state.created = true;
+    state.classTier = 0;
+    state.classPath = null;
+    state.finalClass = null;
+    state.equipment = starterEquipment(draftArchetype);
+    const stats = playerStats();
+    state.hp = stats.maxHp;
+    state.mp = stats.maxMp;
+    saveState();
+    renderCreation();
+    spawnEnemy();
+    renderHud();
+    showActivity("Bem-vindo a Valdora, " + state.name + ".");
+    playTone("level");
+  }
+
+  function activatePresentationMode() {
+    showModal("<div class='modal-crest'><span>▶</span></div><h2>Modo apresentação</h2><p>Leva o personagem ao nível 40, libera recursos e itens de amostra. As promoções continuam disponíveis para demonstrar as escolhas.</p><div class='button-row'><button class='dark-button' data-close-modal>CANCELAR</button><button class='gold-button' data-confirm-presentation>ATIVAR</button></div>");
+  }
+
+  function confirmPresentationMode() {
+    state.created = true;
+    state.level = Math.max(40, state.level);
+    state.xp = 0;
+    state.gold = Math.max(50000, state.gold);
+    state.gems = Math.max(500, state.gems);
+    state.honor = Math.max(1200, state.honor);
+    state.potions = Math.max(50, state.potions);
+    state.etherCharges = Math.max(500, state.etherCharges);
+    state.scrolls = Math.max(25, state.scrolls);
+    state.blessedScrolls = Math.max(8, state.blessedScrolls);
+    state.attributePoints = Math.max(8, state.attributePoints);
+    ["weapon", "helmet", "chest", "gloves", "boots", "necklace", "ring", "cloak"].forEach((slot, index) => {
+      state.inventory.unshift(generateItem({ forcedSlot: slot, forcedGrade: index < 3 ? "B" : "C", forcedRarity: index % 3 === 0 ? "epic" : "rare" }));
+    });
+    const stats = playerStats();
+    state.hp = stats.maxHp;
+    state.mp = stats.maxMp;
+    state.zoneIndex = Math.max(state.zoneIndex, 2);
+    closeModal();
+    closeDrawer();
+    spawnEnemy();
+    saveState();
+    renderHud();
+    showActivity("Modo apresentação ativo: nível 40 e sistemas liberados.");
+    playTone("legendary");
   }
 
   function playTone(type) {
@@ -813,7 +1376,7 @@
 
   function bindEvents() {
     document.addEventListener("click", (event) => {
-      const nav = event.target.closest("[data-view]");
+      const nav = event.target.closest("button[data-view], a[data-view]");
       if (nav) {
         event.preventDefault();
         openDrawer(nav.dataset.view);
@@ -821,88 +1384,132 @@
       }
       if (event.target.closest("[data-close-drawer]")) closeDrawer();
       if (event.target.closest("[data-close-modal]")) closeModal();
-
-      const slot = event.target.closest("[data-open-slot]");
+      const race = event.target.closest("[data-race]");
+      if (race) { draftRace = race.dataset.race; renderCreation(); }
+      const archetype = event.target.closest("[data-archetype]");
+      if (archetype) { draftArchetype = archetype.dataset.archetype; renderCreation(); }
+      const skill = event.target.closest("[data-skill]");
+      if (skill && !skill.classList.contains("cooldown")) useSkill(skill.dataset.skill);
+      const attr = event.target.closest("[data-attribute]");
+      if (attr) allocateAttribute(attr.dataset.attribute);
+      if (event.target.closest("[data-open-promotion]")) openPromotion();
+      const promotion = event.target.closest("[data-promote]");
+      if (promotion) promoteClass(promotion.dataset.promote);
+      const slot = event.target.closest("[data-open-slot], [data-paper-slot]");
       if (slot) {
-        inventoryFilter = slot.dataset.openSlot;
+        inventoryFilter = slot.dataset.openSlot || slot.dataset.paperSlot;
         openDrawer("inventory");
         renderInventory();
       }
-
       const filter = event.target.closest("[data-filter]");
-      if (filter) {
-        inventoryFilter = filter.dataset.filter;
-        selectedInventoryId = null;
-        renderInventory();
-      }
-
+      if (filter) { inventoryFilter = filter.dataset.filter; selectedInventoryId = null; renderInventory(); }
       const item = event.target.closest("[data-item-id]");
       if (item) renderInventory(item.dataset.itemId);
-
       const equip = event.target.closest("[data-equip-item]");
       if (equip) equipItem(equip.dataset.equipItem);
-
       const sell = event.target.closest("[data-sell-item]");
       if (sell) sellItem(sell.dataset.sellItem);
-
       const forgeSelect = event.target.closest("[data-forge-slot]");
-      if (forgeSelect && !forgeSelect.disabled) {
-        forgeSlot = forgeSelect.dataset.forgeSlot;
-        renderForge();
-      }
-
+      if (forgeSelect && !forgeSelect.disabled) { forgeSlot = forgeSelect.dataset.forgeSlot; renderForge(); }
+      const scrollType = event.target.closest("[data-scroll-type]");
+      if (scrollType) { state.useBlessedScroll = scrollType.dataset.scrollType === "blessed"; renderForge(); }
       if (event.target.closest("[data-enchant]")) attemptEnchant();
-
+      const product = event.target.closest("[data-buy-product]");
+      if (product) buyProduct(product.dataset.buyProduct);
+      const listing = event.target.closest("[data-buy-listing]");
+      if (listing) buyListing(listing);
+      const tab = event.target.closest("[data-conflict-tab]");
+      if (tab) renderConflict(tab.dataset.conflictTab);
+      if (event.target.closest("[data-world-boss]")) challengeWorldBoss();
       const duel = event.target.closest("[data-duel]");
       if (duel) duelOpponent(duel);
-
+      if (event.target.closest("[data-join-clan]")) joinClan();
+      if (event.target.closest("[data-territory-war]")) territoryWar();
+      if (event.target.closest("[data-pk-hunt]")) pkHunt();
       const claim = event.target.closest("[data-claim]");
       if (claim) claimMission(claim.dataset.claim);
-
       const zone = event.target.closest("[data-zone]");
       if (zone) selectZone(Number(zone.dataset.zone));
+      if (event.target.closest("[data-presentation]")) activatePresentationMode();
+      if (event.target.closest("[data-confirm-presentation]")) confirmPresentationMode();
+      if (event.target.closest("[data-recreate]")) {
+        closeDrawer();
+        state.created = false;
+        draftRace = state.race;
+        draftArchetype = state.archetype;
+        renderCreation();
+      }
     });
-
+    $("#createCharacterButton").addEventListener("click", createCharacter);
     $("#autoToggle").addEventListener("click", () => {
       state.running = !state.running;
       showActivity(state.running ? "Caçada automática retomada." : "Caçada automática pausada.");
       renderHud();
       saveState();
     });
-    $("#potionButton").addEventListener("click", usePotion);
-    $("#zoneButton").addEventListener("click", renderZones);
+    $("#potionButton").addEventListener("click", () => usePotion(false));
+    $("#zoneButton").addEventListener("click", () => openDrawer("zones"));
+    $("#targetModeButton").addEventListener("click", () => {
+      state.targetMode = state.targetMode === "any" ? "elite" : state.targetMode === "elite" ? "boss" : "any";
+      showActivity("Prioridade de alvo: " + { any: "qualquer", elite: "elites", boss: "chefes" }[state.targetMode] + ".");
+      spawnEnemy();
+      saveState();
+    });
+    $("#autoPotionToggle").addEventListener("change", (event) => {
+      state.autoPotion = event.target.checked;
+      saveState();
+      renderHud();
+    });
+    $("#etherToggle").addEventListener("click", () => useSkill("ether"));
+    $$(".speed").forEach((button) => button.addEventListener("click", () => {
+      state.speed = Number(button.dataset.speed);
+      saveState();
+      renderHud();
+    }));
     $("#soundToggle").addEventListener("click", () => {
       state.sound = !state.sound;
       if (state.sound) playTone("equip");
       renderHud();
       saveState();
     });
+    $("#presentationButton").addEventListener("click", activatePresentationMode);
     $("#resetButton").addEventListener("click", () => {
-      showModal(`<div class="modal-crest"><span>↺</span></div><h2>Reiniciar o teste?</h2><p>Todo o progresso local, itens e enchants serão apagados.</p><div class="button-row"><button class="dark-button" data-close-modal>CANCELAR</button><button class="danger-button" id="confirmReset">REINICIAR</button></div>`);
+      showModal("<div class='modal-crest'><span>↺</span></div><h2>Reiniciar a crônica?</h2><p>Todo o progresso local, personagem, itens e enchants serão apagados.</p><div class='button-row'><button class='dark-button' data-close-modal>CANCELAR</button><button class='danger-button' id='confirmReset'>REINICIAR</button></div>");
       setTimeout(() => {
         $("#confirmReset")?.addEventListener("click", () => {
           localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
           location.reload();
         });
       });
     });
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape") {
-        closeModal();
-        closeDrawer();
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") { closeModal(); closeDrawer(); }
+      if (!["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) && /^[1-6]$/.test(event.key)) {
+        const skill = skillDefinitions()[Number(event.key) - 1];
+        if (skill) useSkill(skill.id);
       }
     });
     window.addEventListener("beforeunload", saveState);
   }
 
   function init() {
-    const maxHp = playerStats().maxHp;
-    if (!Number.isFinite(state.hp) || state.hp <= 0) state.hp = maxHp;
+    const highestUnlocked = ZONES.reduce((highest, zone, index) => state.level >= zone.unlock ? index : highest, 0);
+    state.zoneIndex = clamp(state.zoneIndex, 0, highestUnlocked);
+    const stats = playerStats();
+    if (!Number.isFinite(state.hp) || state.hp <= 0) state.hp = stats.maxHp;
+    if (!Number.isFinite(state.mp) || state.mp <= 0) state.mp = stats.maxMp;
     applyOfflineProgress();
     bindEvents();
+    renderCreation();
     spawnEnemy();
     renderHud();
-    setInterval(combatTick, 850);
+    setInterval(combatTick, 620);
+    setInterval(() => {
+      renderBuffs();
+      renderSkillBar();
+      if ($("#drawer").classList.contains("open") && $("#drawer").dataset.view === "conflict" && conflictTab === "boss") renderConflict("boss");
+    }, 1000);
     setInterval(saveState, 10000);
   }
 

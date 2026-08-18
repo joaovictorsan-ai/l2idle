@@ -1,6 +1,6 @@
-# Valdora Idle
+# Valdora Chronicles
 
-Protótipo jogável de um idle RPG medieval para navegador.
+Protótipo jogável de um idle MMORPG medieval original para navegador, com criação de personagem, classes, auto-hunt, paper doll, enchant, mercado, conflitos e chefe mundial.
 
 ## Demo
 
