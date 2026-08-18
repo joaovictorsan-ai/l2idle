@@ -17,9 +17,10 @@ Depois acesse `http://localhost:8088`.
 
 - Criação de personagem com quatro linhagens e três arquétipos originais.
 - Duas promoções de classe nos níveis 20 e 40, com escolhas de especialização.
-- Mapa 2D explorável com movimentação por WASD, setas, clique ou controles de toque.
-- Criaturas visíveis no campo, encontros escolhidos pelo jogador, NPC, altar interativo e contratos de três abates.
-- Combate manual por skill bar com opção de automação, prioridade de alvo, poções automáticas, mana, buffs e cargas de Éter.
+- Mapa 2D explorável com sprites animados e movimentação manual por WASD, setas ou clique.
+- Caça automática por espécie: o jogador escolhe a criatura, o personagem patrulha o mapa e enfrenta os alvos encontrados, um de cada vez.
+- Criaturas visíveis e animadas no campo, NPC, altar interativo e contratos de três abates.
+- Combate exibido no próprio mapa, com skill bar, prioridade de alvo, poções automáticas, mana, buffs e cargas de Éter.
 - Experiência, atributos, níveis, ouro e progressão persistente via `localStorage`.
 - Oito slots de equipamento em paper doll, cinco graus (D, C, B, A e S) e quatro raridades.
 - Inventário, comparação, requisitos de nível, equipamentos e venda de itens.

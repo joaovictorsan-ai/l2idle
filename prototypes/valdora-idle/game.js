@@ -167,6 +167,11 @@
     { id: "shrine", x: 79, y: 33, range: 11 }
   ];
 
+  const FIELD_PATROL_ROUTE = [
+    { x: 48, y: 72 }, { x: 34, y: 60 }, { x: 42, y: 42 },
+    { x: 59, y: 32 }, { x: 73, y: 50 }, { x: 66, y: 69 }
+  ];
+
   function createStarterItem(slot, name, stats) {
     return { id: makeId(), slot, name, rarity: "common", grade: "D", enchant: 0, ...stats };
   }
@@ -202,7 +207,7 @@
       pvpKills: 0, karma: 0, territoryWins: 0, territoryCooldownUntil: 0,
       clan: { joined: false, name: "", influence: 0 },
       worldBossWins: 0, bossCooldownUntil: 0,
-      fieldPosition: { x: 50, y: 72 }, huntContractKills: 0, huntContractsCompleted: 0, shrineCooldownUntil: 0,
+      fieldPosition: { x: 50, y: 72 }, fieldAutoHunt: false, fieldHuntTarget: "", huntContractKills: 0, huntContractsCompleted: 0, shrineCooldownUntil: 0,
       activeBuffs: { furyUntil: 0, wardUntil: 0 },
       marketPurchases: 0, claimedMissions: [], inventory: [],
       equipment: starterEquipment("vanguard")
@@ -267,6 +272,8 @@
   let fieldEnemies = [];
   let nearbyFieldTarget = null;
   let fieldMoveTimer = null;
+  let autoHuntTimer = null;
+  let patrolRouteIndex = 0;
   let combatLocked = false;
   let selectedInventoryId = null;
   let inventoryFilter = "all";
@@ -421,6 +428,7 @@
 
   function buildFieldEnemies() {
     const zone = ZONES[state.zoneIndex];
+    if (!zone.enemies.includes(state.fieldHuntTarget)) state.fieldHuntTarget = zone.enemies[0];
     fieldEnemies = FIELD_SPAWNS.map((spawn, index) => {
       let rank = targetRank();
       if (index === 1 && rank === "common") rank = "elite";
@@ -446,12 +454,22 @@
       const respawning = target.respawnUntil > now;
       const rankLabel = target.rank === "boss" ? "CHEFE DE CAMPO" : target.rank === "elite" ? "ELITE" : "CRIATURA";
       const name = target.rank === "boss" ? "Alfa " + target.baseName : target.rank === "elite" ? target.baseName + " Veterano" : target.baseName;
-      return "<button class='field-enemy " + target.rank + " " + (respawning ? "respawning" : "") + "' style='--field-x:" + target.x + "%;--field-y:" + target.y + "%' data-field-enemy='" + target.id + "' " + (respawning ? "disabled" : "") + "><img src='assets/ashfang.png' alt='" + escapeHtml(name) + "'><span class='field-enemy-label'><strong>" + escapeHtml(name) + "</strong><small>" + (respawning ? "RETORNANDO" : rankLabel) + "</small></span></button>";
+      const selected = target.id === activeFieldEnemyId;
+      const marked = target.baseName === state.fieldHuntTarget;
+      const variant = ZONES[state.zoneIndex].enemies.indexOf(target.baseName);
+      const hpPercent = selected && enemy ? clamp(enemy.hp / enemy.maxHp * 100, 0, 100) : 100;
+      return "<button class='field-enemy variant-" + variant + " " + target.rank + " " + (respawning ? "respawning " : "") + (selected ? "selected-target " : "") + (marked ? "hunt-marked" : "") + "' style='--field-x:" + target.x + "%;--field-y:" + target.y + "%' data-field-enemy='" + target.id + "' " + (respawning ? "disabled" : "") + "><span class='field-sprite monster-field-sprite'><img src='assets/shadow-wolf-run-sheet.png' alt='" + escapeHtml(name) + "'></span><span class='field-enemy-label'><strong>" + escapeHtml(name) + "</strong><small>" + (respawning ? "RETORNANDO" : marked ? "ALVO DA CAÇA" : rankLabel) + "</small></span><span class='field-enemy-hp'><i style='width:" + hpPercent + "%'></i></span></button>";
     }).join("");
+    const zone = ZONES[state.zoneIndex];
+    $("#fieldTargetPicker").innerHTML = zone.enemies.map((name, index) => "<button class='field-target-option variant-" + index + " " + (state.fieldHuntTarget === name ? "selected" : "") + "' data-hunt-target='" + escapeHtml(name) + "'><span class='field-target-icon'><img src='assets/shadow-wolf-run-sheet.png' alt=''></span><b>" + escapeHtml(name) + "</b></button>").join("");
     const progress = clamp(Number(state.huntContractKills || 0), 0, 3);
     $("#fieldQuestBar").style.width = progress / 3 * 100 + "%";
-    $("#fieldQuestText").textContent = "Derrote 3 criaturas · " + progress + "/3";
-    $("#fieldQuestTitle").textContent = "Ameaças em " + ZONES[state.zoneIndex].title;
+    $("#fieldQuestText").textContent = progress + "/3";
+    $("#fieldQuestTitle").textContent = state.fieldAutoHunt ? "Caçando " + state.fieldHuntTarget : "Escolha a criatura que deseja caçar";
+    $("#fieldHuntState").textContent = state.fieldAutoHunt ? (encounterActive ? "EM COMBATE" : "PATRULHANDO") : "PARADA";
+    $("#fieldAutoHuntToggle").querySelector("b").textContent = state.fieldAutoHunt ? "PARAR CAÇADA" : "INICIAR CAÇADA";
+    $("#fieldAutoHuntCopy").textContent = state.fieldAutoHunt ? "Procurando " + state.fieldHuntTarget : "O herói seguirá o alvo pelo mapa";
+    $(".field-hunt-card").classList.toggle("active", state.fieldAutoHunt);
     renderFieldPlayer();
     checkNearbyFieldTarget();
   }
@@ -461,37 +479,48 @@
     activeFieldEnemyId = null;
     combatLocked = false;
     $("#world").classList.add("exploring");
-    $("#world").classList.remove("combat-active");
+    $("#world").classList.remove("combat-active", "field-combat-active");
     $("#heroEntity").classList.remove("defeated");
+    $("#fieldPlayer").classList.remove("attacking", "hit");
     if (!fieldEnemies.length) buildFieldEnemies();
     renderExploration();
     renderHud();
     if (message) showActivity(message);
+    if (state.fieldAutoHunt) scheduleAutoHunt(650);
   }
 
   function beginFieldEncounter(target) {
     if (!target || target.respawnUntil > Date.now() || encounterActive || !state.created) return;
+    clearTimeout(autoHuntTimer);
     encounterActive = true;
     activeFieldEnemyId = target.id;
     combatLocked = false;
-    $("#world").classList.remove("exploring");
-    $("#world").classList.add("combat-active");
+    $("#world").classList.add("exploring", "field-combat-active");
+    $("#world").classList.remove("combat-active");
+    if (state.fieldAutoHunt) state.running = true;
     spawnEnemy(target);
-    showActivity("Encontro iniciado contra " + enemy.name + ". Use 1–5 ou ative o combate automático.");
+    renderExploration();
+    showActivity((state.fieldAutoHunt ? "Caça automática encontrou " : "Encontro iniciado contra ") + enemy.name + ".");
   }
 
   function fleeFieldEncounter() {
     if (!encounterActive) return;
+    stopFieldAutoHunt(false);
     enterExploration("Você recuou do combate. Escolha outro caminho ou tente novamente.");
     saveState();
   }
 
-  function moveFieldPlayerTo(x, y, callback = null) {
+  function moveFieldPlayerTo(x, y, callback = null, automatic = false) {
     if (encounterActive || !state.created) return;
     clearTimeout(fieldMoveTimer);
-    state.fieldPosition.x = clamp(Number(x), 12, 88);
-    state.fieldPosition.y = clamp(Number(y), 18, 82);
+    const nextX = clamp(Number(x), 12, 88);
+    const nextY = clamp(Number(y), 18, 82);
+    const distance = fieldDistance(state.fieldPosition.x, state.fieldPosition.y, nextX, nextY);
+    const duration = automatic ? clamp(Math.round(distance * 34), 480, 1800) : clamp(Math.round(distance * 28), 220, 900);
+    state.fieldPosition.x = nextX;
+    state.fieldPosition.y = nextY;
     const player = $("#fieldPlayer");
+    player.style.transitionDuration = duration + "ms";
     player.classList.add("walking");
     renderFieldPlayer();
     fieldMoveTimer = setTimeout(() => {
@@ -499,7 +528,7 @@
       checkNearbyFieldTarget();
       saveState();
       if (callback) callback();
-    }, 250);
+    }, duration + 30);
   }
 
   function moveFieldPlayer(direction) {
@@ -512,7 +541,82 @@
   function requestFieldEncounter(id) {
     const target = fieldEnemies.find((entry) => entry.id === id);
     if (!target || target.respawnUntil > Date.now()) return;
-    moveFieldPlayerTo(target.x, target.y + 4, () => beginFieldEncounter(target));
+    selectFieldHuntTarget(target.baseName);
+    if (!state.fieldAutoHunt) startFieldAutoHunt();
+    else scheduleAutoHunt(80);
+  }
+
+  function selectFieldHuntTarget(name) {
+    const zone = ZONES[state.zoneIndex];
+    if (!zone.enemies.includes(name)) return;
+    clearTimeout(fieldMoveTimer);
+    $("#fieldPlayer")?.classList.remove("walking");
+    state.fieldHuntTarget = name;
+    showActivity("Alvo selecionado: " + name + ".");
+    saveState();
+    renderExploration();
+    if (state.fieldAutoHunt) scheduleAutoHunt(80);
+  }
+
+  function startFieldAutoHunt() {
+    if (!state.created) return;
+    const zone = ZONES[state.zoneIndex];
+    if (!zone.enemies.includes(state.fieldHuntTarget)) state.fieldHuntTarget = zone.enemies[0];
+    state.fieldAutoHunt = true;
+    state.running = true;
+    showActivity("Caça iniciada: procurando " + state.fieldHuntTarget + ".");
+    saveState();
+    renderExploration();
+    scheduleAutoHunt(120);
+  }
+
+  function stopFieldAutoHunt(showMessage = true) {
+    clearTimeout(autoHuntTimer);
+    state.fieldAutoHunt = false;
+    if (encounterActive) state.running = false;
+    $("#fieldPlayer")?.classList.remove("walking");
+    if (showMessage) showActivity("Caça automática interrompida.");
+    saveState();
+    renderExploration();
+    renderHud();
+  }
+
+  function toggleFieldAutoHunt() {
+    if (state.fieldAutoHunt) stopFieldAutoHunt();
+    else startFieldAutoHunt();
+  }
+
+  function scheduleAutoHunt(delay = 400) {
+    clearTimeout(autoHuntTimer);
+    if (!state.fieldAutoHunt) return;
+    autoHuntTimer = setTimeout(autoHuntStep, delay);
+  }
+
+  function autoHuntStep() {
+    if (!state.fieldAutoHunt || !state.created) return;
+    if (encounterActive) {
+      state.running = true;
+      return;
+    }
+    if ($("#modal").classList.contains("open") || $("#drawer").classList.contains("open")) {
+      scheduleAutoHunt(800);
+      return;
+    }
+    const available = fieldEnemies.filter((target) => target.baseName === state.fieldHuntTarget && target.respawnUntil <= Date.now());
+    available.sort((a, b) => fieldDistance(state.fieldPosition.x, state.fieldPosition.y, a.x, a.y) - fieldDistance(state.fieldPosition.x, state.fieldPosition.y, b.x, b.y));
+    const target = available[0];
+    if (target) {
+      showActivity("Rastreando " + state.fieldHuntTarget + " pelo campo...");
+      moveFieldPlayerTo(target.x, target.y + 4, () => {
+        if (state.fieldAutoHunt && target.respawnUntil <= Date.now() && !$("#modal").classList.contains("open") && !$("#drawer").classList.contains("open")) beginFieldEncounter(target);
+        else scheduleAutoHunt(300);
+      }, true);
+      return;
+    }
+    const waypoint = FIELD_PATROL_ROUTE[patrolRouteIndex % FIELD_PATROL_ROUTE.length];
+    patrolRouteIndex += 1;
+    showActivity("Nenhum " + state.fieldHuntTarget + " disponível. Patrulhando a região...");
+    moveFieldPlayerTo(waypoint.x, waypoint.y, () => scheduleAutoHunt(550), true);
   }
 
   function checkNearbyFieldTarget() {
@@ -688,11 +792,19 @@
     const damage = Math.max(1, Math.round(enemy.attack * (.85 + Math.random() * .28) - stats.defense * .33));
     state.hp = Math.max(0, state.hp - damage);
     const entity = $("#enemyEntity");
+    const fieldEntity = activeFieldEnemyId ? $("[data-field-enemy='" + activeFieldEnemyId + "']") : null;
     entity.classList.remove("attack");
     void entity.offsetWidth;
     entity.classList.add("attack");
+    if (fieldEntity) {
+      fieldEntity.classList.remove("attacking");
+      void fieldEntity.offsetWidth;
+      fieldEntity.classList.add("attacking");
+    }
     setTimeout(() => $("#heroEntity").classList.add("hit"), 100);
     setTimeout(() => $("#heroEntity").classList.remove("hit"), 320);
+    setTimeout(() => $("#fieldPlayer").classList.add("hit"), 100);
+    setTimeout(() => $("#fieldPlayer").classList.remove("hit"), 320);
     showDamage(damage, false, true);
     if (state.autoPotion && state.potions > 0 && state.hp / stats.maxHp <= .35) usePotion(true);
     renderHud();
@@ -702,19 +814,29 @@
   function animatePlayerAttack(damage, crit) {
     const hero = $("#heroEntity");
     const target = $("#enemyEntity");
+    const fieldHero = $("#fieldPlayer");
+    const fieldTarget = activeFieldEnemyId ? $("[data-field-enemy='" + activeFieldEnemyId + "']") : null;
     const flash = $("#combatFlash");
     hero.classList.remove("attack");
     void hero.offsetWidth;
     hero.classList.add("attack");
+    fieldHero.classList.remove("attacking");
+    void fieldHero.offsetWidth;
+    fieldHero.classList.add("attacking");
     setTimeout(() => {
       target.classList.add("hit");
+      fieldTarget?.classList.add("hit");
       flash.classList.remove("show");
       void flash.offsetWidth;
       flash.classList.add("show");
       showDamage(damage, crit, false);
       playTone(crit ? "crit" : "hit");
     }, Math.round(170 / state.speed));
-    setTimeout(() => target.classList.remove("hit"), Math.round(390 / state.speed));
+    setTimeout(() => {
+      target.classList.remove("hit");
+      fieldTarget?.classList.remove("hit");
+      fieldHero.classList.remove("attacking");
+    }, Math.round(390 / state.speed));
   }
 
   function showDamage(value, crit, fromEnemy) {
@@ -723,10 +845,21 @@
     node.textContent = typeof value === "string" ? value : (crit ? "CRIT -" : "-") + value;
     $("#damageLayer").appendChild(node);
     setTimeout(() => node.remove(), 850);
+    if (encounterActive) {
+      const fieldNode = document.createElement("span");
+      const target = fieldEnemies.find((entry) => entry.id === activeFieldEnemyId);
+      fieldNode.className = "field-damage" + (crit ? " crit" : "") + (fromEnemy ? " enemy-damage" : "");
+      fieldNode.textContent = typeof value === "string" ? value : (crit ? "CRIT -" : "-") + value;
+      fieldNode.style.left = (fromEnemy ? state.fieldPosition.x : target?.x || 50) + "%";
+      fieldNode.style.top = (fromEnemy ? state.fieldPosition.y - 7 : (target?.y || 50) - 8) + "%";
+      $("#explorationLayer").appendChild(fieldNode);
+      setTimeout(() => fieldNode.remove(), 850);
+    }
   }
 
   function handleEnemyDefeat() {
     $("#enemyEntity").classList.add("defeated");
+    if (activeFieldEnemyId) $("[data-field-enemy='" + activeFieldEnemyId + "']")?.classList.add("defeated");
     const defeatedEnemy = enemy;
     const fieldTarget = fieldEnemies.find((target) => target.id === activeFieldEnemyId);
     state.kills += 1;
@@ -763,12 +896,14 @@
     saveState();
     renderHud();
     setTimeout(() => {
-      enterExploration("Volte ao campo para escolher seu próximo alvo.");
+      enterExploration(state.fieldAutoHunt ? "Alvo abatido. Retomando a patrulha automática..." : "Volte ao campo para escolher seu próximo alvo.");
     }, Math.round(720 / state.speed));
   }
 
   function handlePlayerDefeat() {
     state.running = false;
+    state.fieldAutoHunt = false;
+    clearTimeout(autoHuntTimer);
     $("#heroEntity").classList.add("defeated");
     showActivity(escapeHtml(state.name) + " foi derrotado e retornará ao posto da fronteira.");
     setTimeout(() => {
@@ -873,6 +1008,8 @@
       $("#enemyHpBar").style.width = enemyPercent + "%";
       $("#enemyHpText").textContent = Math.ceil(enemy.hp) + " / " + enemy.maxHp;
       $("#enemyReward").textContent = enemy.exp + " EXP · " + enemy.gold + " ouro";
+      const fieldHp = activeFieldEnemyId ? $("[data-field-enemy='" + activeFieldEnemyId + "'] .field-enemy-hp i") : null;
+      if (fieldHp) fieldHp.style.width = enemyPercent + "%";
     }
     const auto = $("#autoToggle");
     auto.classList.toggle("active", state.running);
@@ -1512,7 +1649,7 @@
     buildFieldEnemies();
     enterExploration();
     renderHud();
-    showActivity("Bem-vindo a L2idle, " + state.name + ". Use WASD ou clique no mapa para começar a caçada.");
+    showActivity("Bem-vindo a L2idle, " + state.name + ". Escolha uma criatura e inicie a caçada.");
     playTone("level");
   }
 
@@ -1582,6 +1719,15 @@
         openDrawer(nav.dataset.view);
         return;
       }
+      const huntTarget = event.target.closest("[data-hunt-target]");
+      if (huntTarget) {
+        selectFieldHuntTarget(huntTarget.dataset.huntTarget);
+        return;
+      }
+      if (event.target.closest("#fieldAutoHuntToggle")) {
+        toggleFieldAutoHunt();
+        return;
+      }
       const fieldEnemy = event.target.closest("[data-field-enemy]");
       if (fieldEnemy) {
         requestFieldEncounter(fieldEnemy.dataset.fieldEnemy);
@@ -1589,12 +1735,14 @@
       }
       const fieldAction = event.target.closest("[data-field-action]");
       if (fieldAction) {
+        if (state.fieldAutoHunt) stopFieldAutoHunt(false);
         const landmark = FIELD_LANDMARKS.find((entry) => entry.id === fieldAction.dataset.fieldAction);
         if (landmark) moveFieldPlayerTo(landmark.x, landmark.y + 4, () => interactWithLandmark(landmark.id));
         return;
       }
       const movement = event.target.closest("[data-move]");
       if (movement) {
+        if (state.fieldAutoHunt) stopFieldAutoHunt(false);
         moveFieldPlayer(movement.dataset.move);
         return;
       }
@@ -1662,6 +1810,7 @@
       }
       const explorationMap = event.target.closest("#explorationLayer");
       if (explorationMap && !event.target.closest("button,aside,.movement-pad")) {
+        if (state.fieldAutoHunt) stopFieldAutoHunt(false);
         const rect = explorationMap.getBoundingClientRect();
         moveFieldPlayerTo((event.clientX - rect.left) / rect.width * 100, (event.clientY - rect.top) / rect.height * 100);
       }
@@ -1669,6 +1818,11 @@
     $("#createCharacterButton").addEventListener("click", createCharacter);
     $("#autoToggle").addEventListener("click", () => {
       state.running = !state.running;
+      if (!state.running && state.fieldAutoHunt) {
+        state.fieldAutoHunt = false;
+        clearTimeout(autoHuntTimer);
+        renderExploration();
+      }
       showActivity(encounterActive ? (state.running ? "Combate automático ativado." : "Combate automático pausado.") : (state.running ? "Combate automático preparado para o próximo encontro." : "Próximo encontro será controlado manualmente."));
       renderHud();
       saveState();
@@ -1716,6 +1870,7 @@
       const movementKeys = { ArrowUp: "up", w: "up", W: "up", ArrowDown: "down", s: "down", S: "down", ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right" };
       if (!encounterActive && state.created && movementKeys[event.key] && !$("#modal").classList.contains("open") && !$("#drawer").classList.contains("open")) {
         event.preventDefault();
+        if (state.fieldAutoHunt) stopFieldAutoHunt(false);
         moveFieldPlayer(movementKeys[event.key]);
         return;
       }

@@ -1,6 +1,6 @@
 # L2idle
 
-Protótipo jogável de um MMORPG medieval para navegador, com exploração em mapa 2D, caça ativa, classes, combate opcionalmente automático, paper doll, enchant, mercado, bosses e PvP.
+Protótipo jogável de um MMORPG medieval para navegador, com personagens 2D animados, escolha da criatura a caçar, patrulha e combate automáticos no próprio mapa, classes, paper doll, enchant, mercado, bosses e PvP.
 
 ## Demo
 

@@ -46,11 +46,12 @@
         </div>
 
         <div class="exploration-layer" id="explorationLayer" aria-label="Mapa 2D explorável">
-          <aside class="field-quest-card glass-panel">
-            <span>CONTRATO DE CAÇA</span>
-            <strong id="fieldQuestTitle">Ameaças da fronteira</strong>
-            <div class="field-quest-progress"><i id="fieldQuestBar"></i></div>
-            <small id="fieldQuestText">Derrote 3 criaturas · 0/3</small>
+          <aside class="field-hunt-card glass-panel">
+            <div class="field-hunt-heading"><span>CAÇA AUTOMÁTICA</span><b id="fieldHuntState">PARADA</b></div>
+            <strong id="fieldQuestTitle">Escolha a criatura que deseja caçar</strong>
+            <div class="field-target-picker" id="fieldTargetPicker"></div>
+            <button class="field-auto-button" id="fieldAutoHuntToggle"><i></i><span><b>INICIAR CAÇADA</b><small id="fieldAutoHuntCopy">O herói seguirá o alvo pelo mapa</small></span></button>
+            <div class="field-contract-row"><span>CONTRATO</span><div class="field-quest-progress"><i id="fieldQuestBar"></i></div><small id="fieldQuestText">0/3</small></div>
           </aside>
 
           <button class="field-landmark field-npc" style="--field-x:26%;--field-y:25%" data-field-action="warden" aria-label="Conversar com o Vigia Rowan">
@@ -64,18 +65,11 @@
 
           <div class="field-player" id="fieldPlayer">
             <div class="field-player-name"><strong id="fieldPlayerName">Kael</strong><small id="fieldPlayerClass">Vanguarda</small></div>
-            <img src="assets/duskblade.png" alt="Personagem controlável de L2idle">
+            <span class="field-sprite hero-field-sprite"><img src="assets/hero-walk-sheet.png" alt="Guerreiro animado de L2idle"></span>
             <i></i>
           </div>
 
-          <button class="interaction-prompt" id="interactionPrompt" type="button"><kbd>E</kbd><span id="interactionText">APROXIME-SE DE UM ALVO</span></button>
-          <div class="exploration-help"><span>WASD / SETAS</span> para andar <b>·</b> clique no mapa ou em um inimigo</div>
-          <div class="movement-pad" aria-label="Controles de movimento">
-            <button data-move="up" aria-label="Andar para cima">▲</button>
-            <button data-move="left" aria-label="Andar para a esquerda">◀</button>
-            <button data-move="down" aria-label="Andar para baixo">▼</button>
-            <button data-move="right" aria-label="Andar para a direita">▶</button>
-          </div>
+          <button class="interaction-prompt" id="interactionPrompt" type="button" hidden><kbd>E</kbd><span id="interactionText">APROXIME-SE DE UM ALVO</span></button>
         </div>
 
         <aside class="panel player-card glass-panel">
