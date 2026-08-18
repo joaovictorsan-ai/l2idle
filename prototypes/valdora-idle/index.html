@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#080b10">
-  <meta name="description" content="Valdora Chronicles, protótipo original de idle MMORPG medieval para navegador.">
-  <title>Valdora Chronicles — Idle MMORPG</title>
+  <meta name="description" content="L2idle, protótipo de idle MMORPG medieval para navegador.">
+  <title>L2idle — Idle MMORPG</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,9 +14,9 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" data-view="hunt" aria-label="Valdora Chronicles">
-        <span class="brand-mark"><i>V</i></span>
-        <span><strong>VALDORA</strong><small>CHRONICLES · IDLE MMORPG</small></span>
+      <a class="brand" href="#" data-view="hunt" aria-label="L2idle">
+        <span class="brand-mark"><i>L2</i></span>
+        <span><strong>L2IDLE</strong><small>IDLE MMORPG · PROTÓTIPO</small></span>
       </a>
 
       <nav class="main-nav" aria-label="Navegação principal">
@@ -25,7 +25,7 @@
         <button class="nav-item" data-view="inventory"><span>▦</span>Inventário <b id="inventoryBadge" data-empty="true">0</b></button>
         <button class="nav-item" data-view="forge"><span>✦</span>Forja</button>
         <button class="nav-item" data-view="market"><span>⚖</span>Mercado</button>
-        <button class="nav-item" data-view="conflict"><span>♜</span>Conflito <b id="conflictBadge">1</b></button>
+        <button class="nav-item" data-view="conflict"><span>♜</span>Bosses <b id="conflictBadge">1</b></button>
       </nav>
 
       <div class="account-cluster">
@@ -48,7 +48,7 @@
         <aside class="panel player-card glass-panel">
           <div class="panel-kicker"><span>PERSONAGEM</span><b id="gradeBadge">GRAU D</b></div>
           <div class="player-row">
-            <div class="portrait-frame"><img id="portraitImage" src="assets/duskblade.png" alt="Personagem de Valdora"></div>
+            <div class="portrait-frame"><img id="portraitImage" src="assets/duskblade.png" alt="Personagem de L2idle"></div>
             <div class="player-identity">
               <span class="class-label" id="classLabel">VANGUARDA</span>
               <div><strong id="playerName">Kael</strong><span class="level-pill">Nv. <b id="levelValue">1</b></span></div>
@@ -89,7 +89,7 @@
         <div class="combat-scene" aria-label="Área de combate">
           <div class="entity hero-entity" id="heroEntity">
             <div class="floating-name"><strong id="heroNameFloat">Kael</strong><span id="heroLevelFloat">Nv. 1</span></div>
-            <img id="heroImage" src="assets/duskblade.png" alt="Herói de Valdora">
+            <img id="heroImage" src="assets/duskblade.png" alt="Herói de L2idle">
             <div class="entity-aura" id="heroAura"></div><div class="entity-shadow"></div>
           </div>
           <div class="combat-flash" id="combatFlash"></div><div class="damage-layer" id="damageLayer"></div>
@@ -104,7 +104,7 @@
           <span><small>ITEM ENCONTRADO</small><strong id="lootToastName">Espada Antiga</strong><em id="lootToastGrade">Grau D</em></span>
         </div>
 
-        <button class="boss-signal" id="bossSignal" data-view="conflict"><span class="boss-signal-icon">♛</span><span><small>CHEFE MUNDIAL AVISTADO</small><strong>Soberano das Brasas</strong></span><b>DESAFIAR ›</b></button>
+        <button class="boss-signal" id="bossSignal" data-view="conflict"><span class="boss-signal-icon">♛</span><span><small>CHEFE MUNDIAL AVISTADO</small><strong>Valakas</strong></span><b>DESAFIAR ›</b></button>
 
         <div class="skill-dock glass-panel" aria-label="Barra de habilidades">
           <div class="skill-meta"><small>BARRA DE HABILIDADES</small><strong id="combatModeText">MODO AUTOMÁTICO</strong></div>
@@ -136,13 +136,13 @@
       <section class="creation-screen" id="creationScreen" aria-hidden="true">
         <div class="creation-vignette"></div>
         <div class="creation-card">
-          <div class="creation-copy"><span>CRÔNICAS DE VALDORA</span><h1>Forje seu legado</h1><p>Escolha uma linhagem e um caminho de combate. Aos níveis 20 e 40, novas especializações serão abertas.</p></div>
+          <div class="creation-copy"><span>CRÔNICAS DE L2IDLE</span><h1>Forje seu legado</h1><p>Escolha uma linhagem e um caminho de combate. Aos níveis 20 e 40, novas especializações serão abertas.</p></div>
           <div class="creation-form">
             <label class="name-field"><span>NOME DO PERSONAGEM</span><input id="characterNameInput" maxlength="16" value="Kael" autocomplete="off"></label>
             <div class="creation-section"><div class="creation-label"><span>01</span><div><strong>Escolha sua linhagem</strong><small>Cada povo altera seus atributos iniciais.</small></div></div><div class="race-grid" id="raceGrid"></div></div>
             <div class="creation-section"><div class="creation-label"><span>02</span><div><strong>Escolha seu arquétipo</strong><small>Seu caminho define habilidades e promoções.</small></div></div><div class="archetype-grid" id="archetypeGrid"></div></div>
             <div class="creation-summary" id="creationSummary"></div>
-            <button class="creation-submit" id="createCharacterButton">ENTRAR EM VALDORA</button>
+            <button class="creation-submit" id="createCharacterButton">ENTRAR EM L2IDLE</button>
           </div>
         </div>
       </section>

@@ -1,6 +1,6 @@
-# Valdora Chronicles
+# L2idle
 
-Protótipo jogável de um idle MMORPG medieval original para navegador, com criação de personagem, classes, auto-hunt, paper doll, enchant, mercado, conflitos e chefe mundial.
+Protótipo jogável de um idle MMORPG medieval para navegador, com criação de personagem, classes, auto-hunt, paper doll, enchant, mercado, bosses e PvP.
 
 ## Demo
 

@@ -1,6 +1,6 @@
-# Valdora Chronicles — protótipo
+# L2idle — protótipo
 
-Vertical slice local de um idle MMORPG medieval para navegador. A proposta é validar progressão, identidade de classe, caçada automática, economia e conflitos antes de investir em backend ou multiplayer real.
+Vertical slice local de um idle MMORPG medieval para navegador. A proposta é validar progressão, identidade de classe, caçada automática, economia, bosses e PvP antes de investir em backend ou multiplayer real.
 
 ## Como executar
 

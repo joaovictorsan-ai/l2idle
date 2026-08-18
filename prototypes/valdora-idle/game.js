@@ -144,7 +144,7 @@
     { id: "level20", icon: "✦", title: "Primeira especialização", copy: "Alcance o nível 20.", field: "level", goal: 20, gold: 2200, gems: 18 },
     { id: "enchant3", icon: "◆", title: "Mestre da forja", copy: "Realize 3 tentativas de enchant.", field: "enchantAttempts", goal: 3, gold: 1200, gems: 12 },
     { id: "arena1", icon: "♜", title: "Conclave de heróis", copy: "Vença 1 duelo ranqueado.", field: "arenaWins", goal: 1, gold: 1600, gems: 14 },
-    { id: "boss1", icon: "♛", title: "Queda do soberano", copy: "Derrote 1 chefe mundial.", field: "worldBossWins", goal: 1, gold: 5000, gems: 35 },
+    { id: "boss1", icon: "♛", title: "Queda de Valakas", copy: "Derrote Valakas uma vez.", field: "worldBossWins", goal: 1, gold: 5000, gems: 35 },
     { id: "territory1", icon: "⚑", title: "Pelo estandarte", copy: "Vença 1 guerra territorial.", field: "territoryWins", goal: 1, gold: 3400, gems: 24 }
   ];
 
@@ -658,7 +658,7 @@
     $("#zoneSubtitle").textContent = zone.subtitle;
     $("#zoneButtonText").textContent = zone.title;
     $("#world").style.setProperty("--zone-bg", "url('" + zone.background + "')");
-    $("#pvpZoneFlag").textContent = zone.pvp ? "ZONA DE CONFLITO" : "ZONA SEGURA";
+    $("#pvpZoneFlag").textContent = zone.pvp ? "ZONA PVP" : "ZONA SEGURA";
     $("#pvpZoneFlag").classList.toggle("danger", zone.pvp);
     const promotionReady = (state.level >= 20 && state.classTier === 0) || (state.level >= 40 && state.classTier === 1);
     $("#classBadge").dataset.empty = !promotionReady;
@@ -757,10 +757,10 @@
       character: ["FICHA E PROGRESSÃO", "Personagem"],
       inventory: ["EQUIPAMENTO", "Inventário e paper doll"],
       forge: ["APRIMORAMENTO", "Forja Rúnica"],
-      market: ["ECONOMIA DE VALDORA", "Mercado"],
-      conflict: ["PVP E MUNDO", "Conflitos"],
+      market: ["ECONOMIA DE L2IDLE", "Mercado"],
+      conflict: ["RAIDS E PVP", "Bosses"],
       missions: ["JORNADA", "Missões"],
-      zones: ["MAPA DE VALDORA", "Regiões de caça"]
+      zones: ["MAPA DE L2IDLE", "Regiões de caça"]
     }[view];
   }
 
@@ -1077,7 +1077,7 @@
     const stats = playerStats();
     const remaining = Math.max(0, Math.ceil((state.bossCooldownUntil - Date.now()) / 1000));
     const recommended = Math.max(650, Math.round(stats.power * 1.08));
-    return "<div class='boss-raid'><div class='boss-art'></div><div class='boss-title'><small>EVENTO DE MUNDO · EXPEDIÇÃO DE 12 HERÓIS</small><h3>Soberano das Brasas</h3><p>Uma criatura original de obsidiana despertou sob a Cratera das Cinzas.</p></div><div class='raid-stats'><div><small>PODER RECOMENDADO</small><strong>" + formatNumber(recommended) + "</strong></div><div><small>SEU PODER</small><strong>" + formatNumber(stats.power) + "</strong></div><div><small>VITÓRIAS</small><strong>" + state.worldBossWins + "</strong></div></div><div class='boss-actions'><button class='danger-button' style='width:100%' data-world-boss " + (remaining ? "disabled" : "") + ">" + (remaining ? "NOVA EXPEDIÇÃO EM " + remaining + "s" : "ENTRAR NA EXPEDIÇÃO") + "</button></div></div><div class='section-kicker'>DROP RARO</div><p class='section-copy'>A vitória garante um equipamento lendário e pode antecipar o próximo grau disponível.</p>";
+    return "<div class='boss-raid'><div class='boss-art'></div><div class='boss-title'><small>EVENTO DE MUNDO · EXPEDIÇÃO DE 12 HERÓIS</small><h3>Valakas</h3><p>O dragão Valakas despertou sob a Cratera das Cinzas.</p></div><div class='raid-stats'><div><small>PODER RECOMENDADO</small><strong>" + formatNumber(recommended) + "</strong></div><div><small>SEU PODER</small><strong>" + formatNumber(stats.power) + "</strong></div><div><small>VITÓRIAS</small><strong>" + state.worldBossWins + "</strong></div></div><div class='boss-actions'><button class='danger-button' style='width:100%' data-world-boss " + (remaining ? "disabled" : "") + ">" + (remaining ? "NOVA EXPEDIÇÃO EM " + remaining + "s" : "ENTRAR NA EXPEDIÇÃO") + "</button></div></div><div class='section-kicker'>DROP RARO</div><p class='section-copy'>A vitória garante um equipamento lendário e pode antecipar o próximo grau disponível.</p>";
   }
 
   function challengeWorldBoss() {
@@ -1102,7 +1102,7 @@
     renderHud();
     renderConflict("boss");
     playTone(win ? "legendary" : "fail");
-    showModal("<div class='modal-crest'><span>" + (win ? "♛" : "⚔") + "</span></div><h2>Expedição concluída</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "CHEFE DERROTADO" : "EXPEDIÇÃO RECUOU") + "</div><p>" + (win ? "O Soberano tombou. Você recebeu um drop lendário, ouro, cristais e honra." : "A linha de frente não resistiu. Reforce seu equipamento e reúna uma nova expedição.") + "</p><button class='dark-button' style='width:100%' data-close-modal>VOLTAR</button>");
+    showModal("<div class='modal-crest'><span>" + (win ? "♛" : "⚔") + "</span></div><h2>Expedição concluída</h2><div class='result-banner " + (win ? "win" : "loss") + "'>" + (win ? "CHEFE DERROTADO" : "EXPEDIÇÃO RECUOU") + "</div><p>" + (win ? "Valakas tombou. Você recebeu um drop lendário, ouro, cristais e honra." : "A linha de frente não resistiu. Reforce seu equipamento e reúna uma nova expedição.") + "</p><button class='dark-button' style='width:100%' data-close-modal>VOLTAR</button>");
   }
 
   function renderConclave() {
@@ -1140,7 +1140,7 @@
   function renderClanWar() {
     const clanName = state.clan.joined ? state.clan.name : "Sem clã";
     const territoryRemaining = Math.max(0, Math.ceil((state.territoryCooldownUntil - Date.now()) / 1000));
-    return "<p class='section-copy'>Clãs disputam influência nas fortalezas de Valdora. Abates hostis aumentam karma e a taxa do mercado.</p><div class='clan-card'><div class='clan-emblem'>⚜</div><div><h3>" + escapeHtml(clanName) + "</h3><p>" + (state.clan.joined ? "Influência " + state.clan.influence + " · membro da coalizão de Aurion." : "Junte-se a uma companhia para participar das guerras.") + "</p></div><button class='gold-button' data-join-clan " + (state.clan.joined ? "disabled" : "") + ">" + (state.clan.joined ? "MEMBRO" : "ENTRAR") + "</button></div><div class='territory-card'><div class='territory-icon'>⚑</div><div><h3>Guerra da Fortaleza de Aurion</h3><p>Evento simulado de território. Requer clã e recompensa influência.</p></div><button class='danger-button' data-territory-war " + (!state.clan.joined || territoryRemaining ? "disabled" : "") + ">" + (territoryRemaining ? territoryRemaining + "s" : "LUTAR") + "</button></div><div class='territory-card'><div class='territory-icon'>☠</div><div><h3>Caçada hostil</h3><p>Enfrente outro aventureiro no mundo aberto. +120 karma.</p></div><button class='dark-button' data-pk-hunt>ATACAR</button></div><div class='score-row' style='margin-top:9px'><div class='score-box'><small>ABATES PVP</small><strong>" + state.pvpKills + "</strong></div><div class='score-box'><small>KARMA</small><strong>" + state.karma + "</strong></div><div class='score-box'><small>VITÓRIAS TERRITORIAIS</small><strong>" + state.territoryWins + "</strong></div></div>";
+    return "<p class='section-copy'>Clãs disputam influência nas fortalezas de L2idle. Abates hostis aumentam karma e a taxa do mercado.</p><div class='clan-card'><div class='clan-emblem'>⚜</div><div><h3>" + escapeHtml(clanName) + "</h3><p>" + (state.clan.joined ? "Influência " + state.clan.influence + " · membro da coalizão de Aurion." : "Junte-se a uma companhia para participar das guerras.") + "</p></div><button class='gold-button' data-join-clan " + (state.clan.joined ? "disabled" : "") + ">" + (state.clan.joined ? "MEMBRO" : "ENTRAR") + "</button></div><div class='territory-card'><div class='territory-icon'>⚑</div><div><h3>Guerra da Fortaleza de Aurion</h3><p>Evento simulado de território. Requer clã e recompensa influência.</p></div><button class='danger-button' data-territory-war " + (!state.clan.joined || territoryRemaining ? "disabled" : "") + ">" + (territoryRemaining ? territoryRemaining + "s" : "LUTAR") + "</button></div><div class='territory-card'><div class='territory-icon'>☠</div><div><h3>Caçada hostil</h3><p>Enfrente outro aventureiro no mundo aberto. +120 karma.</p></div><button class='dark-button' data-pk-hunt>ATACAR</button></div><div class='score-row' style='margin-top:9px'><div class='score-box'><small>ABATES PVP</small><strong>" + state.pvpKills + "</strong></div><div class='score-box'><small>KARMA</small><strong>" + state.karma + "</strong></div><div class='score-box'><small>VITÓRIAS TERRITORIAIS</small><strong>" + state.territoryWins + "</strong></div></div>";
   }
 
   function joinClan() {
@@ -1213,7 +1213,7 @@
   }
 
   function renderZones() {
-    $("#drawerContent").innerHTML = "<p class='section-copy'>Teleporte para áreas com novos graus, inimigos e regras de conflito.</p><div class='zone-list'>" + ZONES.map((zone, index) => {
+    $("#drawerContent").innerHTML = "<p class='section-copy'>Teleporte para áreas com novos graus, inimigos e regras de PvP.</p><div class='zone-list'>" + ZONES.map((zone, index) => {
       const locked = state.level < zone.unlock;
       return "<div class='zone-card " + (locked ? "locked " : "") + (index === state.zoneIndex ? "active" : "") + "' data-zone='" + index + "'><div class='zone-icon'>" + (locked ? "⌁" : zone.icon) + "</div><div><h3>" + zone.title + "</h3><p>" + zone.subtitle + (locked ? " · libera no Nv. " + zone.unlock : "") + "</p></div><span>" + (index === state.zoneIndex ? "●" : "›") + "</span></div>";
     }).join("") + "</div>";
@@ -1313,7 +1313,7 @@
     renderCreation();
     spawnEnemy();
     renderHud();
-    showActivity("Bem-vindo a Valdora, " + state.name + ".");
+    showActivity("Bem-vindo a L2idle, " + state.name + ".");
     playTone("level");
   }
 
